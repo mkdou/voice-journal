@@ -10,7 +10,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="icon.svg" />
-    <link rel="stylesheet" href="styles.css?v=layout-v2" />
+    <link rel="stylesheet" href="styles.css?v=layout-v3" />
   </head>
   <body>
     <div class="app-shell">
@@ -31,7 +31,7 @@
               <div class="editor-meta">
                 <input id="entryDateInput" type="date" />
                 <select id="entryFolderSelect" aria-label="移动到文件夹"></select>
-                <button class="date-token" id="dateTokenBtn" type="button" title="插入固定日期"></button>
+                <button class="secondary-action save-entry-action" id="publishEntryBtn" type="button">保存日记</button>
               </div>
             </div>
 
@@ -112,6 +112,10 @@
             </div>
             <div class="entry-list" id="entryList"></div>
           </div>
+
+          <article class="review-detail" id="reviewDetail">
+            <div class="empty-state">点一篇日记，在这里查看内容。</div>
+          </article>
         </section>
       </main>
 
@@ -127,6 +131,6 @@
       </nav>
     </div>
 
-    <script src="app.js?v=layout-v2"></script>
+    <script src="app.js?v=layout-v3"></script>
   </body>
 </html>

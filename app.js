@@ -21,6 +21,7 @@ const state = {
   entries: [],
   activeFolderId: "all",
   activeEntryId: null,
+  reviewEntryId: null,
   activeView: "record",
   search: "",
   recorder: null,
@@ -50,7 +51,8 @@ const el = {
   titleInput: document.querySelector("#titleInput"),
   entryDateInput: document.querySelector("#entryDateInput"),
   entryFolderSelect: document.querySelector("#entryFolderSelect"),
-  dateTokenBtn: document.querySelector("#dateTokenBtn"),
+  publishEntryBtn: document.querySelector("#publishEntryBtn"),
+  reviewDetail: document.querySelector("#reviewDetail"),
   recordBtn: document.querySelector("#recordBtn"),
   recordLabel: document.querySelector("#recordLabel"),
   recordTimer: document.querySelector("#recordTimer"),
@@ -198,6 +200,7 @@ function filteredEntries() {
 function render() {
   renderView();
   renderFolders();
+  renderReviewDetail();
   renderEntries();
   renderEditor();
 }
@@ -243,7 +246,7 @@ function renderEntries() {
   el.entryList.innerHTML = entries.map((entry) => {
     const preview = (plainText(entry.body) || (entry.segments || []).map((segment) => segment.text).join(" ") || "还没有正文").replace(/\s+/g, " ").trim();
     return `
-      <div class="entry-item ${entry.id === state.activeEntryId ? "active" : ""}" data-entry-id="${entry.id}">
+      <div class="entry-item ${entry.id === state.reviewEntryId ? "active" : ""}" data-entry-id="${entry.id}">
         <button class="entry-open" data-open-entry="${entry.id}" type="button">
           <span class="entry-title">${escapeHtml(entry.title || "未命名日记")}</span>
           <span class="entry-preview">${escapeHtml(preview)}</span>
@@ -277,8 +280,36 @@ function renderEditor() {
   }
   el.entryDateInput.value = entry.date;
   el.entryFolderSelect.value = entry.folderId;
-  el.dateTokenBtn.textContent = "插入日期";
   renderSegments(entry);
+}
+
+function renderReviewDetail() {
+  if (!el.reviewDetail) return;
+  const entry = state.entries.find((item) => item.id === state.reviewEntryId) || filteredEntries()[0] || null;
+  if (!entry) {
+    el.reviewDetail.innerHTML = `<div class="empty-state">还没有可回看的日记。</div>`;
+    return;
+  }
+  state.reviewEntryId = entry.id;
+  const folder = state.folders.find((item) => item.id === entry.folderId)?.name || "日记";
+  const transcript = (entry.segments || [])
+    .slice()
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .map((segment) => segmentText(segment))
+    .filter(Boolean)
+    .join("\n\n");
+  el.reviewDetail.innerHTML = `
+    <div class="review-detail-head">
+      <div>
+        <h3>${escapeHtml(entry.title || "未命名日记")}</h3>
+        <p>${escapeHtml(entry.date)} · ${escapeHtml(folder)} · ${escapeHtml(formatDateTime(entry.updatedAt))}</p>
+      </div>
+      <button class="secondary-action" type="button" data-edit-review-entry="${entry.id}">编辑</button>
+    </div>
+    <div class="review-body">${normalizeBodyHtml(entry.body) || "<p>这篇还没有正文。</p>"}</div>
+    ${transcript ? `<pre class="review-transcript">${escapeHtml(transcript)}</pre>` : ""}
+  `;
+  refreshDateChipsIn(el.reviewDetail);
 }
 
 function renderSegments(entry) {
@@ -372,6 +403,7 @@ async function deleteActiveEntry(entryId) {
 
   await deleteFromStore("entries", entryId);
   state.entries = state.entries.filter((item) => item.id !== entryId);
+  if (state.reviewEntryId === entryId) state.reviewEntryId = null;
   if (state.activeEntryId === entryId) {
     state.activeEntryId = filteredEntries()[0]?.id || state.entries[0]?.id || null;
   }
@@ -516,16 +548,27 @@ function fixedDateMarkdown() {
 }
 
 function dateChipHtml(date) {
-  return `<span class="date-chip" contenteditable="false" data-date="${date}">今天</span><span class="caret-spacer">&nbsp;</span>`;
+  return `<span class="date-chip" contenteditable="false" data-date="${date}" title="点按可删除日期">今天</span><span class="caret-spacer">&nbsp;</span>`;
 }
 
 function refreshDateChips() {
-  el.bodyInput.querySelectorAll(".date-chip[data-date]").forEach((chip) => {
+  refreshDateChipsIn(el.bodyInput);
+}
+
+function refreshDateChipsIn(root) {
+  root.querySelectorAll(".date-chip[data-date]").forEach((chip) => {
     const date = chip.dataset.date;
     const isToday = date === todayISO();
     chip.classList.toggle("past", !isToday);
     chip.textContent = isToday ? "今天" : `${displayDate(date)} ${weekdayName(date)}`;
   });
+}
+
+function deleteDateChip(chip) {
+  const spacer = chip.nextElementSibling?.classList.contains("caret-spacer") ? chip.nextElementSibling : null;
+  chip.remove();
+  spacer?.remove();
+  saveBodyFromEditor();
 }
 
 function applyMarkdown(action) {
@@ -940,6 +983,7 @@ function bindEvents() {
 
   el.reviewTabBtn.addEventListener("click", () => {
     state.activeView = "review";
+    state.reviewEntryId ||= state.entries[0]?.id || null;
     render();
     el.searchInput.focus();
   });
@@ -953,14 +997,24 @@ function bindEvents() {
 
     const openButton = event.target.closest("[data-open-entry]");
     if (!openButton) return;
-    state.activeEntryId = openButton.dataset.openEntry;
+    state.reviewEntryId = openButton.dataset.openEntry;
+    renderEntries();
+    renderReviewDetail();
+  });
+
+  el.reviewDetail.addEventListener("click", (event) => {
+    const editButton = event.target.closest("[data-edit-review-entry]");
+    if (!editButton) return;
+    state.activeEntryId = editButton.dataset.editReviewEntry;
     state.activeView = "record";
     render();
+    el.titleInput.focus();
   });
 
   el.searchInput.addEventListener("input", () => {
     state.search = el.searchInput.value;
     renderEntries();
+    renderReviewDetail();
   });
 
   el.titleInput.addEventListener("input", () => updateActiveEntry({ title: el.titleInput.value }));
@@ -972,9 +1026,19 @@ function bindEvents() {
     handleEditorShortcuts();
     saveBodyFromEditor();
   });
+  el.bodyInput.addEventListener("click", (event) => {
+    const chip = event.target.closest(".date-chip[data-date]");
+    if (!chip) return;
+    if (confirm("删除这个日期块吗？")) deleteDateChip(chip);
+  });
   el.entryDateInput.addEventListener("change", () => updateActiveEntry({ date: el.entryDateInput.value }));
   el.entryFolderSelect.addEventListener("change", () => updateActiveEntry({ folderId: el.entryFolderSelect.value }));
-  el.dateTokenBtn.addEventListener("click", () => insertAtCursor(fixedDateMarkdown()));
+  el.publishEntryBtn.addEventListener("click", async () => {
+    await updateActiveEntry({ body: bodyHtml() });
+    state.reviewEntryId = state.activeEntryId;
+    state.activeView = "review";
+    render();
+  });
 
   el.toolbar.addEventListener("click", (event) => {
     const button = event.target.closest("[data-md]");
