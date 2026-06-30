@@ -30,7 +30,8 @@ const state = {
   liveTranscript: "",
   recordingStartedAt: 0,
   timerId: null,
-  segmentStartedAt: null
+  segmentStartedAt: null,
+  stopRequested: false
 };
 
 const el = {
@@ -352,7 +353,7 @@ function setupSpeechRecognition() {
     el.recordHint.textContent = "转写中断，录音仍会保存";
   };
   recognition.onend = () => {
-    if (state.recorder?.state === "recording") {
+    if (!state.stopRequested && state.recorder?.state === "recording") {
       try {
         recognition.start();
       } catch {
@@ -389,6 +390,7 @@ async function startRecording() {
   state.chunks = [];
   state.segmentChunks = [];
   state.liveTranscript = "";
+  state.stopRequested = false;
   state.recordingStartedAt = Date.now();
   state.segmentStartedAt = Date.now();
   const mimeType = pickMimeType();
@@ -402,6 +404,18 @@ async function startRecording() {
     }
   };
   state.recorder.onstop = saveRecordingSegment;
+  state.recorder.onerror = () => {
+    stopRecording("录音被浏览器中断，已尝试保存已有片段");
+  };
+  state.mediaStream.getAudioTracks().forEach((track) => {
+    track.onended = () => {
+      if (state.recorder?.state === "recording") {
+        stopRecording("麦克风已被系统停止，已保存已有录音");
+      } else {
+        resetRecordingUi("麦克风已被系统停止");
+      }
+    };
+  });
   state.recorder.start(1000);
 
   if (state.recognition) {
@@ -420,14 +434,44 @@ async function startRecording() {
   }, 250);
 }
 
-function stopRecording() {
-  if (state.recognition) state.recognition.stop();
-  if (state.recorder?.state === "recording") state.recorder.stop();
-  state.mediaStream?.getTracks().forEach((track) => track.stop());
+function stopRecording(message = "录音和转写已保存到当前日记") {
+  state.stopRequested = true;
+  try {
+    state.recognition?.stop();
+  } catch {
+    el.recordHint.textContent = "转写停止失败，正在保存录音";
+  }
+
+  try {
+    if (state.recorder?.state === "recording") {
+      try {
+        state.recorder.requestData();
+      } catch {
+        el.recordHint.textContent = "正在停止录音";
+      }
+      state.recorder.stop();
+    } else {
+      saveRecordingSegment();
+    }
+  } catch {
+    saveRecordingSegment();
+  } finally {
+    state.mediaStream?.getTracks().forEach((track) => {
+      track.onended = null;
+      if (track.readyState !== "ended") track.stop();
+    });
+    state.mediaStream = null;
+    resetRecordingUi(message);
+  }
+}
+
+function resetRecordingUi(message) {
   window.clearInterval(state.timerId);
+  state.timerId = null;
   el.recordBtn.classList.remove("recording");
   el.recordLabel.textContent = "开始录音";
   el.recordTimer.textContent = "00:00";
+  el.recordHint.textContent = message;
 }
 
 function pickMimeType() {
