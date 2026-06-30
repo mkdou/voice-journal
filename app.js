@@ -425,31 +425,48 @@ function bodyHtml() {
 }
 
 function normalizeBodyHtml(value) {
-  const raw = String(value || "");
-  if (!raw.trim()) return "";
-  const withDateChips = raw.replace(/&lt;date value="(\d{4}-\d{2}-\d{2})"&gt;.*?&lt;\/date&gt;|<date value="(\d{4}-\d{2}-\d{2})">.*?<\/date>/g, (_match, escapedDate, htmlDate) => dateChipHtml(escapedDate || htmlDate));
-  if (/<[a-z][\s\S]*>/i.test(withDateChips)) return cleanLegacyMarkdownHtml(withDateChips);
-  return withDateChips
-    .split(/\n{2,}/)
-    .map((paragraph) => blockFromPlainText(paragraph))
-    .join("");
+  try {
+    const raw = String(value || "");
+    if (!raw.trim()) return "";
+    const withDateChips = raw.replace(/&lt;date value="(\d{4}-\d{2}-\d{2})"&gt;.*?&lt;\/date&gt;|<date value="(\d{4}-\d{2}-\d{2})">.*?<\/date>/g, (_match, escapedDate, htmlDate) => dateChipHtml(escapedDate || htmlDate));
+    if (/<[a-z][\s\S]*>/i.test(withDateChips)) return cleanLegacyMarkdownHtml(withDateChips);
+    return withDateChips
+      .split(/\n{2,}/)
+      .map((paragraph) => blockFromPlainText(paragraph))
+      .join("");
+  } catch {
+    return fallbackBodyHtml(value);
+  }
 }
 
 function cleanLegacyMarkdownHtml(html) {
   const template = document.createElement("template");
   template.innerHTML = html;
   template.content.querySelectorAll("p, div").forEach((node) => {
+    if (!node.parentNode) return;
     if (node.classList.contains("craft-block")) return;
     const text = node.textContent.trim();
     if (!text) return;
     const replacement = blockFromPlainText(text);
     if (replacement !== `<p>${escapeHtml(text)}</p>`) {
-      node.outerHTML = replacement;
+      replaceNodeWithHtml(node, replacement);
     } else {
       node.innerHTML = inlineMarkdownToHtml(text);
     }
   });
   return template.innerHTML;
+}
+
+function replaceNodeWithHtml(node, html) {
+  if (!node.parentNode) return;
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  node.replaceWith(...template.content.childNodes);
+}
+
+function fallbackBodyHtml(value) {
+  const text = String(value || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  return text ? `<p>${escapeHtml(text)}</p>` : "";
 }
 
 function blockFromPlainText(text) {

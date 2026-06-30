@@ -947,11 +947,13 @@ button {
   }
 
   .editor-meta {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: 1fr;
   }
 
-  .date-token {
-    grid-column: 1 / -1;
+  .editor-meta input,
+  .editor-meta select,
+  .save-entry-action {
+    width: 100%;
   }
 
   .recorder-strip,
