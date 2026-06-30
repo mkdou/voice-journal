@@ -127,6 +127,14 @@ function put(storeName, value) {
   });
 }
 
+function deleteFromStore(storeName, key) {
+  return new Promise((resolve, reject) => {
+    const request = tx(storeName, "readwrite").delete(key);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
 async function seedIfNeeded() {
   const folders = await getAll("folders");
   if (!folders.length) {
@@ -214,11 +222,14 @@ function renderEntries() {
   el.entryList.innerHTML = entries.map((entry) => {
     const preview = (plainText(entry.body) || (entry.segments || []).map((segment) => segment.text).join(" ") || "还没有正文").replace(/\s+/g, " ").trim();
     return `
-      <button class="entry-item ${entry.id === state.activeEntryId ? "active" : ""}" data-entry-id="${entry.id}" type="button">
-        <span class="entry-title">${escapeHtml(entry.title || "未命名日记")}</span>
-        <span class="entry-preview">${escapeHtml(preview)}</span>
-        <span class="entry-date">${escapeHtml(entry.date)} · ${escapeHtml(formatDateTime(entry.updatedAt))}</span>
-      </button>
+      <div class="entry-item ${entry.id === state.activeEntryId ? "active" : ""}" data-entry-id="${entry.id}">
+        <button class="entry-open" data-open-entry="${entry.id}" type="button">
+          <span class="entry-title">${escapeHtml(entry.title || "未命名日记")}</span>
+          <span class="entry-preview">${escapeHtml(preview)}</span>
+          <span class="entry-date">${escapeHtml(entry.date)} · ${escapeHtml(formatDateTime(entry.updatedAt))}</span>
+        </button>
+        <button class="entry-delete" data-delete-entry="${entry.id}" type="button" title="删除日记">删除</button>
+      </div>
     `;
   }).join("");
 }
@@ -256,7 +267,8 @@ function renderSegments(entry) {
     return;
   }
 
-  el.segments.innerHTML = segments.map((segment, index) => {
+  const sortedSegments = [...segments].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  el.segments.innerHTML = sortedSegments.map((segment, index) => {
     const audioUrl = segment.audio ? URL.createObjectURL(segment.audio) : "";
     return `
       <div class="segment-card">
@@ -270,6 +282,7 @@ function renderSegments(entry) {
           <button type="button" data-append-segment="${segment.id}">追加到正文</button>
           ${segment.audio ? `<button type="button" data-transcribe-segment="${segment.id}">${segment.transcriptSource === "cloud" ? "重新生成准确转写" : "生成准确转写"}</button>` : ""}
           ${audioUrl ? `<a href="${audioUrl}" download="${escapeHtml(entry.date)}-${index + 1}.webm">下载录音</a>` : ""}
+          <button class="danger-action" type="button" data-delete-segment="${segment.id}">删除分段</button>
         </div>
       </div>
     `;
@@ -320,6 +333,30 @@ async function replaceSegment(segmentId, patch) {
   ));
   await updateActiveEntry({ segments });
   return segments.find((segment) => segment.id === segmentId) || null;
+}
+
+async function deleteActiveEntry(entryId) {
+  const entry = state.entries.find((item) => item.id === entryId);
+  if (!entry) return;
+  const title = entry.title || "未命名日记";
+  if (!confirm(`删除「${title}」？这会同时删除里面保存的录音分段。`)) return;
+
+  await deleteFromStore("entries", entryId);
+  state.entries = state.entries.filter((item) => item.id !== entryId);
+  if (state.activeEntryId === entryId) {
+    state.activeEntryId = filteredEntries()[0]?.id || state.entries[0]?.id || null;
+  }
+  render();
+}
+
+async function deleteSegment(segmentId) {
+  const entry = activeEntry();
+  const segment = entry?.segments?.find((item) => item.id === segmentId);
+  if (!entry || !segment) return;
+  if (!confirm(`删除这段录音？${segment.duration ? `录音时长 ${segment.duration}` : ""}`)) return;
+
+  const segments = (entry.segments || []).filter((item) => item.id !== segmentId);
+  await updateActiveEntry({ segments });
 }
 
 function bodyHtml() {
@@ -809,9 +846,15 @@ function bindEvents() {
   });
 
   el.entryList.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-entry-id]");
-    if (!button) return;
-    state.activeEntryId = button.dataset.entryId;
+    const deleteButton = event.target.closest("[data-delete-entry]");
+    if (deleteButton) {
+      deleteActiveEntry(deleteButton.dataset.deleteEntry);
+      return;
+    }
+
+    const openButton = event.target.closest("[data-open-entry]");
+    if (!openButton) return;
+    state.activeEntryId = openButton.dataset.openEntry;
     render();
   });
 
@@ -852,6 +895,12 @@ function bindEvents() {
   el.saveSegmentBtn.addEventListener("click", saveCurrentSegmentWhileRecording);
 
   el.segments.addEventListener("click", (event) => {
+    const deleteButton = event.target.closest("[data-delete-segment]");
+    if (deleteButton) {
+      deleteSegment(deleteButton.dataset.deleteSegment);
+      return;
+    }
+
     const transcribeButton = event.target.closest("[data-transcribe-segment]");
     if (transcribeButton) {
       transcribeButton.disabled = true;
@@ -870,7 +919,12 @@ function bindEvents() {
   });
 
   el.copyTranscriptBtn.addEventListener("click", async () => {
-    const text = (activeEntry()?.segments || []).map((segment) => segment.text).filter(Boolean).join("\n\n");
+    const text = (activeEntry()?.segments || [])
+      .slice()
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .map((segment) => segment.text)
+      .filter(Boolean)
+      .join("\n\n");
     if (text) await navigator.clipboard.writeText(text);
   });
 }

@@ -254,10 +254,42 @@ button {
 }
 
 .entry-item {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
   min-height: 78px;
   padding: 10px;
+}
+
+.entry-open {
+  display: grid;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.entry-delete {
+  align-self: start;
+  min-height: 28px;
+  padding: 4px 7px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.entry-delete:hover,
+.danger-action:hover {
+  border-color: rgba(189, 47, 47, 0.22);
+  background: rgba(189, 47, 47, 0.08);
+  color: var(--danger);
 }
 
 .entry-title {
@@ -626,6 +658,10 @@ button {
   color: var(--ink);
   font-size: 12px;
   text-decoration: none;
+}
+
+.segment-actions .danger-action {
+  color: var(--danger);
 }
 
 .empty-state {
