@@ -619,8 +619,7 @@ async function transcribeSegment(segmentId) {
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(errorText || `转写失败：${response.status}`);
+      throw new Error(await responseErrorMessage(response));
     }
 
     const result = await response.json();
@@ -687,6 +686,21 @@ function readableTranscribeError(error) {
     return "准确转写服务连接失败。请检查接口地址、网络、浏览器插件，或稍后重试。";
   }
   return message || "准确转写失败，请稍后重试。";
+}
+
+async function responseErrorMessage(response) {
+  try {
+    const result = await response.json();
+    if (result?.error) return result.error;
+  } catch {
+    try {
+      const text = await response.text();
+      if (text) return text;
+    } catch {
+      // Keep the generic status fallback below.
+    }
+  }
+  return `转写失败：${response.status}`;
 }
 
 function blobToBase64(blob) {

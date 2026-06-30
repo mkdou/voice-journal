@@ -57,7 +57,7 @@ export default async function handler(req, res) {
     const result = await openaiResponse.json();
     if (!openaiResponse.ok) {
       res.status(openaiResponse.status).json({
-        error: result?.error?.message || "OpenAI transcription failed"
+        error: readableOpenAIError(openaiResponse.status, result?.error?.message)
       });
       return;
     }
@@ -75,4 +75,10 @@ function setCorsHeaders(req, res) {
   res.setHeader("Vary", "Origin");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+}
+
+function readableOpenAIError(status, message) {
+  if (status === 401) return "OpenAI API key 无效，请重新生成并更新 Vercel 环境变量 OPENAI_API_KEY。";
+  if (status === 429) return "OpenAI API 额度不足或账单未开启，请检查 OpenAI Platform 的 Billing 和 Usage。";
+  return message || "OpenAI transcription failed";
 }
