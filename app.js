@@ -1,5 +1,6 @@
 const DB_NAME = "voice-journal-db";
 const DB_VERSION = 1;
+const TRANSCRIBE_ENDPOINT_KEY = "voiceJournalTranscribeEndpoint";
 
 const defaultFolders = [
   { id: "daily", name: "日常" },
@@ -264,9 +265,10 @@ function renderSegments(entry) {
           <span class="segment-duration">录音时长 ${escapeHtml(segment.duration || "00:00")}</span>
         </div>
         ${audioUrl ? `<audio controls src="${audioUrl}"></audio>` : ""}
-        <p class="segment-text">${escapeHtml(segment.text || "这段录音暂时没有转写文字。")}</p>
+        <p class="segment-text">${escapeHtml(segmentText(segment))}</p>
         <div class="segment-actions">
           <button type="button" data-append-segment="${segment.id}">追加到正文</button>
+          ${segment.audio ? `<button type="button" data-transcribe-segment="${segment.id}">${segment.transcriptSource === "cloud" ? "重新生成准确转写" : "生成准确转写"}</button>` : ""}
           ${audioUrl ? `<a href="${audioUrl}" download="${escapeHtml(entry.date)}-${index + 1}.webm">下载录音</a>` : ""}
         </div>
       </div>
@@ -281,6 +283,13 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function segmentText(segment) {
+  if (segment.transcriptionStatus === "running") return "正在生成准确转写...";
+  if (segment.transcriptionStatus === "error") return segment.transcriptionError || "准确转写失败，可稍后重试。";
+  if (segment.transcriptSource === "cloud" && segment.text) return `准确转写：${segment.text}`;
+  return segment.text || "这段录音暂时没有转写文字。";
 }
 
 function plainText(html) {
@@ -301,6 +310,16 @@ async function updateActiveEntry(patch) {
   state.entries = state.entries.map((item) => item.id === entry.id ? entry : item)
     .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
   render();
+}
+
+async function replaceSegment(segmentId, patch) {
+  const entry = activeEntry();
+  if (!entry) return null;
+  const segments = (entry.segments || []).map((segment) => (
+    segment.id === segmentId ? { ...segment, ...patch } : segment
+  ));
+  await updateActiveEntry({ segments });
+  return segments.find((segment) => segment.id === segmentId) || null;
 }
 
 function bodyHtml() {
@@ -539,6 +558,78 @@ function appendHtmlToBody(html) {
   updateActiveEntry({ body: nextBody });
 }
 
+async function transcribeSegment(segmentId) {
+  const entry = activeEntry();
+  const segment = entry?.segments?.find((item) => item.id === segmentId);
+  if (!entry || !segment?.audio) return;
+
+  const endpoint = getTranscribeEndpoint();
+  if (!endpoint) return;
+
+  await replaceSegment(segmentId, { transcriptionStatus: "running" });
+  try {
+    const audioBase64 = await blobToBase64(segment.audio);
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        audioBase64,
+        mimeType: segment.audio.type || "audio/webm",
+        filename: `${entry.date}-${segmentId}.webm`,
+        language: "zh"
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || `转写失败：${response.status}`);
+    }
+
+    const result = await response.json();
+    const text = String(result.text || "").trim();
+    if (!text) throw new Error("转写服务没有返回文本");
+
+    await replaceSegment(segmentId, {
+      text,
+      transcriptSource: "cloud",
+      transcriptionStatus: "done",
+      transcribedAt: new Date().toISOString()
+    });
+    appendHtmlToBody(`<h3>准确转写 · ${escapeHtml(segment.duration || "00:00")}</h3><p>${escapeHtml(text)}</p>`);
+  } catch (error) {
+    await replaceSegment(segmentId, {
+      transcriptionStatus: "error",
+      transcriptionError: error.message || "准确转写失败"
+    });
+    alert(error.message || "准确转写失败，请稍后重试。");
+  }
+}
+
+function getTranscribeEndpoint() {
+  const saved = localStorage.getItem(TRANSCRIBE_ENDPOINT_KEY);
+  if (saved) return saved;
+
+  const sameOriginEndpoint = `${window.location.origin}/api/transcribe`;
+  if (!window.location.hostname.endsWith("github.io")) return sameOriginEndpoint;
+
+  const endpoint = prompt("粘贴准确转写服务地址，例如 https://your-app.vercel.app/api/transcribe");
+  if (!endpoint?.trim()) return "";
+  localStorage.setItem(TRANSCRIBE_ENDPOINT_KEY, endpoint.trim());
+  return endpoint.trim();
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const value = String(reader.result || "");
+      resolve(value.includes(",") ? value.split(",").pop() : value);
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
 function updateLiveTranscript(interim = "") {
   const finalText = state.liveTranscript.trim();
   const parts = [];
@@ -761,6 +852,16 @@ function bindEvents() {
   el.saveSegmentBtn.addEventListener("click", saveCurrentSegmentWhileRecording);
 
   el.segments.addEventListener("click", (event) => {
+    const transcribeButton = event.target.closest("[data-transcribe-segment]");
+    if (transcribeButton) {
+      transcribeButton.disabled = true;
+      transcribeButton.textContent = "转写中...";
+      transcribeSegment(transcribeButton.dataset.transcribeSegment).finally(() => {
+        transcribeButton.disabled = false;
+      });
+      return;
+    }
+
     const button = event.target.closest("[data-append-segment]");
     if (!button) return;
     const entry = activeEntry();
