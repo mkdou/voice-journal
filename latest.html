@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#176b5b" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Voice Journal" />
+    <title>Voice Journal</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="icon.svg" />
+    <link rel="stylesheet" href="styles.css?v=layout-v4" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <div class="brand-row">
+          <div class="brand-mark">VJ</div>
+          <div>
+            <h1>Voice Journal</h1>
+            <p id="speechStatus">正在检测转写能力</p>
+          </div>
+        </div>
+      </header>
+
+      <main class="app-main">
+        <article class="editor-surface" data-view-panel="record">
+            <div class="editor-header">
+              <input id="titleInput" class="title-input" placeholder="给今天起个标题" />
+              <div class="editor-meta">
+                <input id="entryDateInput" type="date" />
+                <select id="entryFolderSelect" aria-label="移动到文件夹"></select>
+                <button class="secondary-action save-entry-action" id="publishEntryBtn" type="button">保存日记</button>
+              </div>
+            </div>
+
+            <div class="recorder-strip">
+              <div class="recorder-main">
+                <button class="record-button" id="recordBtn" type="button">
+                  <span class="record-dot"></span>
+                  <span id="recordLabel">开始录音</span>
+                </button>
+                <div class="record-stats">
+                  <strong id="recordTimer">00:00</strong>
+                  <span id="recordHint">录音会保存在当前日记里</span>
+                </div>
+              </div>
+              <button class="secondary-action" id="saveSegmentBtn" type="button">保存当前分段</button>
+              <div class="live-transcript" id="liveTranscriptBox">
+                <span class="live-label">实时转写草稿</span>
+                <p id="liveTranscriptText">开始录音后，这里会显示浏览器实时识别到的中文。准确版可后续接入云端转写。</p>
+              </div>
+            </div>
+
+            <div class="toolbar" aria-label="Markdown 工具栏">
+              <button type="button" data-md="bold" title="加粗">B</button>
+              <button type="button" data-md="italic" title="斜体"><i>I</i></button>
+              <button type="button" data-md="heading" title="标题">H</button>
+              <button type="button" data-md="quote" title="引用">"</button>
+              <button type="button" data-md="list" title="列表">•</button>
+              <button type="button" data-md="check" title="待办">☐</button>
+              <button type="button" data-md="date" title="固定日期">今天</button>
+              <button type="button" data-md="divider" title="分隔线">---</button>
+            </div>
+
+            <div class="slash-helper" id="slashHelper" hidden>
+              <button type="button" data-command="date">今天 - 插入固定日期</button>
+              <button type="button" data-command="time">现在 - 插入当前时间</button>
+              <button type="button" data-command="heading">标题 - 新段落标题</button>
+              <button type="button" data-command="todo">待办 - 复选项</button>
+              <button type="button" data-command="audio">录音 - 插入录音索引</button>
+            </div>
+
+            <div
+              id="bodyInput"
+              class="body-input"
+              contenteditable="true"
+              role="textbox"
+              aria-multiline="true"
+              data-placeholder="输入 / 呼出日期块；输入 === 生成白色方块。录音转写会自动追加到这里。"
+            ></div>
+
+            <section class="transcript-panel">
+              <div class="section-heading">
+                <span>录音与转写分段</span>
+                <button class="text-button" id="copyTranscriptBtn" type="button">复制转写</button>
+              </div>
+              <div class="segments" id="segments"></div>
+            </section>
+        </article>
+
+        <section class="review-surface" data-view-panel="review" aria-label="回看日记" hidden>
+          <div class="review-header">
+            <div>
+              <h2>回看</h2>
+              <p>搜索、筛选和打开已经记录的日记</p>
+            </div>
+            <button class="icon-button" id="addFolderBtn" type="button" title="新建文件夹">+</button>
+          </div>
+
+          <div class="search-wrap">
+            <input id="searchInput" type="search" placeholder="搜索标题、正文、转写..." />
+          </div>
+
+          <div class="folder-list" id="folderList"></div>
+
+          <div class="entry-list-wrap" aria-label="日记列表">
+            <div class="section-heading">
+              <span id="currentFolderName">全部日记</span>
+              <span class="muted-count" id="entryCount">0</span>
+            </div>
+            <div class="entry-list" id="entryList"></div>
+          </div>
+
+          <article class="review-detail" id="reviewDetail">
+            <div class="empty-state">点一篇日记，在这里查看内容。</div>
+          </article>
+        </section>
+      </main>
+
+      <nav class="bottom-tabs" aria-label="主要入口">
+        <button class="tab-button active" id="newEntryBtn" type="button">
+          <span>＋</span>
+          <strong>新建</strong>
+        </button>
+        <button class="tab-button" id="reviewTabBtn" type="button">
+          <span>⌕</span>
+          <strong>回看</strong>
+        </button>
+      </nav>
+    </div>
+
+    <script src="app.js?v=layout-v4"></script>
+  </body>
+</html>
