@@ -1,4 +1,4 @@
-const CACHE_NAME = "voice-journal-v11";
+const CACHE_NAME = "voice-journal-v12";
 const APP_SHELL = [
   "./",
   "./index.html",
