@@ -1,0 +1,18 @@
+{
+  "name": "Voice Journal",
+  "short_name": "Voice Journal",
+  "description": "录音、中文转写、Markdown 日记",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f6f4ef",
+  "theme_color": "#176b5b",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
