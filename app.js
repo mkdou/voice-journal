@@ -270,7 +270,8 @@ function renderSegments(entry) {
 
   const sortedSegments = [...segments].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   el.segments.innerHTML = sortedSegments.map((segment, index) => {
-    const audioUrl = segment.audio ? URL.createObjectURL(segment.audio) : "";
+    const audioUrl = segmentAudioUrl(segment);
+    const hasAudio = Boolean(audioUrl);
     return `
       <div class="segment-card">
         <div class="segment-top">
@@ -281,13 +282,20 @@ function renderSegments(entry) {
         <p class="segment-text">${escapeHtml(segmentText(segment))}</p>
         <div class="segment-actions">
           <button type="button" data-append-segment="${segment.id}">追加到正文</button>
-          ${segment.audio ? `<button type="button" data-transcribe-segment="${segment.id}">${segment.transcriptSource === "cloud" ? "重新生成准确转写" : "生成准确转写"}</button>` : ""}
-          ${audioUrl ? `<a href="${audioUrl}" download="${escapeHtml(entry.date)}-${index + 1}.webm">下载录音</a>` : ""}
+          ${hasAudio ? `<button type="button" data-transcribe-segment="${segment.id}">${segment.transcriptSource === "cloud" ? "重新生成准确转写" : "生成准确转写"}</button>` : ""}
+          ${hasAudio ? `<a href="${audioUrl}" download="${escapeHtml(entry.date)}-${index + 1}.webm">下载录音</a>` : ""}
           <button class="danger-action" type="button" data-delete-segment="${segment.id}">删除分段</button>
         </div>
       </div>
     `;
   }).join("");
+}
+
+function segmentAudioUrl(segment) {
+  if (segment?.audio instanceof Blob && segment.audio.size > 0) {
+    return URL.createObjectURL(segment.audio);
+  }
+  return segment?.audioDataUrl || "";
 }
 
 function escapeHtml(value) {
@@ -599,20 +607,21 @@ function appendHtmlToBody(html) {
 async function transcribeSegment(segmentId) {
   const entry = activeEntry();
   const segment = entry?.segments?.find((item) => item.id === segmentId);
-  if (!entry || !segment?.audio) return;
+  const audio = await segmentAudioBlob(segment);
+  if (!entry || !audio) return;
 
   const endpoint = getTranscribeEndpoint();
   if (!endpoint) return;
 
   await replaceSegment(segmentId, { transcriptionStatus: "running" });
   try {
-    const audioBase64 = await blobToBase64(segment.audio);
+    const audioBase64 = await blobToBase64(audio);
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         audioBase64,
-        mimeType: segment.audio.type || "audio/webm",
+        mimeType: audio.type || segment.audioMimeType || "audio/webm",
         filename: `${entry.date}-${segmentId}.webm`,
         language: "zh"
       })
@@ -703,13 +712,23 @@ async function responseErrorMessage(response) {
   return `转写失败：${response.status}`;
 }
 
+async function segmentAudioBlob(segment) {
+  if (segment?.audio instanceof Blob && segment.audio.size > 0) return segment.audio;
+  if (!segment?.audioDataUrl) return null;
+  const response = await fetch(segment.audioDataUrl);
+  return response.blob();
+}
+
 function blobToBase64(blob) {
+  return blobToDataUrl(blob).then((value) => (
+    value.includes(",") ? value.split(",").pop() : value
+  ));
+}
+
+function blobToDataUrl(blob) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => {
-      const value = String(reader.result || "");
-      resolve(value.includes(",") ? value.split(",").pop() : value);
-    };
+    reader.onload = () => resolve(String(reader.result || ""));
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(blob);
   });
@@ -834,11 +853,16 @@ async function saveRecordingSegment() {
   if (!entry || !state.segmentChunks.length) return;
   const mimeType = state.segmentChunks[0]?.type || "audio/webm";
   const audio = new Blob(state.segmentChunks, { type: mimeType });
+  if (!audio.size) return;
+  const audioDataUrl = await blobToDataUrl(audio);
   const duration = formatTimer(Date.now() - state.segmentStartedAt);
   const text = state.liveTranscript.trim();
   const segment = {
     id: uid("segment"),
     audio,
+    audioDataUrl,
+    audioMimeType: mimeType,
+    audioSize: audio.size,
     text,
     duration,
     createdAt: new Date().toISOString()
