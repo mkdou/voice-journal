@@ -1,5 +1,5 @@
 const DB_NAME = "voice-journal-db";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const TRANSCRIBE_ENDPOINT_KEY = "voiceJournalTranscribeEndpoint";
 const DEFAULT_TRANSCRIBE_ENDPOINT = "https://voice-journal-nu.vercel.app/api/transcribe";
 
@@ -21,6 +21,7 @@ const state = {
   entries: [],
   activeFolderId: "all",
   activeEntryId: null,
+  activeView: "record",
   search: "",
   recorder: null,
   mediaStream: null,
@@ -41,6 +42,9 @@ const el = {
   entryCount: document.querySelector("#entryCount"),
   addFolderBtn: document.querySelector("#addFolderBtn"),
   newEntryBtn: document.querySelector("#newEntryBtn"),
+  reviewTabBtn: document.querySelector("#reviewTabBtn"),
+  recordPanel: document.querySelector('[data-view-panel="record"]'),
+  reviewPanel: document.querySelector('[data-view-panel="review"]'),
   searchInput: document.querySelector("#searchInput"),
   speechStatus: document.querySelector("#speechStatus"),
   titleInput: document.querySelector("#titleInput"),
@@ -100,12 +104,19 @@ function openDb() {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
     request.onupgradeneeded = () => {
       const db = request.result;
-      db.createObjectStore("folders", { keyPath: "id" });
-      db.createObjectStore("entries", { keyPath: "id" });
+      ensureObjectStore(db, "folders");
+      ensureObjectStore(db, "entries");
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
+    request.onblocked = () => reject(new Error("数据库被旧页面占用，请关闭其他已打开的日记页面后重试。"));
   });
+}
+
+function ensureObjectStore(db, name) {
+  if (!db.objectStoreNames.contains(name)) {
+    db.createObjectStore(name, { keyPath: "id" });
+  }
 }
 
 function tx(storeName, mode = "readonly") {
@@ -185,9 +196,18 @@ function filteredEntries() {
 }
 
 function render() {
+  renderView();
   renderFolders();
   renderEntries();
   renderEditor();
+}
+
+function renderView() {
+  const isReview = state.activeView === "review";
+  el.recordPanel.hidden = isReview;
+  el.reviewPanel.hidden = !isReview;
+  el.newEntryBtn.classList.toggle("active", !isReview);
+  el.reviewTabBtn.classList.toggle("active", isReview);
 }
 
 function renderFolders() {
@@ -257,7 +277,7 @@ function renderEditor() {
   }
   el.entryDateInput.value = entry.date;
   el.entryFolderSelect.value = entry.folderId;
-  el.dateTokenBtn.textContent = `固定日期 · ${entry.date}`;
+  el.dateTokenBtn.textContent = "插入日期";
   renderSegments(entry);
 }
 
@@ -913,8 +933,15 @@ function bindEvents() {
     await put("entries", entry);
     state.entries.unshift(entry);
     state.activeEntryId = entry.id;
+    state.activeView = "record";
     render();
     el.titleInput.focus();
+  });
+
+  el.reviewTabBtn.addEventListener("click", () => {
+    state.activeView = "review";
+    render();
+    el.searchInput.focus();
   });
 
   el.entryList.addEventListener("click", (event) => {
@@ -927,6 +954,7 @@ function bindEvents() {
     const openButton = event.target.closest("[data-open-entry]");
     if (!openButton) return;
     state.activeEntryId = openButton.dataset.openEntry;
+    state.activeView = "record";
     render();
   });
 
@@ -1012,7 +1040,7 @@ async function init() {
 
 init().catch((error) => {
   console.error(error);
-  el.speechStatus.textContent = "初始化失败，请刷新重试";
+  el.speechStatus.textContent = `初始化失败：${error.message || "请刷新重试"}`;
 });
 
 function registerServiceWorker() {

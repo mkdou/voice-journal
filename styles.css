@@ -726,3 +726,246 @@ button {
     padding: 16px;
   }
 }
+
+[hidden] {
+  display: none !important;
+}
+
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+  padding-bottom: 92px;
+}
+
+.app-header {
+  position: sticky;
+  z-index: 8;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 76px;
+  padding: 14px max(18px, env(safe-area-inset-left)) 12px max(18px, env(safe-area-inset-left));
+  border-bottom: 1px solid rgba(222, 216, 206, 0.72);
+  background: rgba(246, 244, 239, 0.86);
+  backdrop-filter: blur(18px);
+}
+
+.app-header .brand-row p {
+  max-width: min(62vw, 520px);
+  overflow: hidden;
+  color: var(--accent-strong);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-main {
+  width: min(100%, 1120px);
+  margin: 0 auto;
+  padding: 18px;
+}
+
+.editor-surface,
+.review-surface {
+  min-height: calc(100vh - 186px);
+  border: 1px solid rgba(222, 216, 206, 0.86);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.editor-surface {
+  padding: clamp(16px, 3vw, 28px);
+}
+
+.review-surface {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+  padding: clamp(16px, 3vw, 28px);
+}
+
+.review-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.review-header h2 {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.15;
+}
+
+.review-header p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.review-surface .search-wrap {
+  max-width: none;
+}
+
+.review-surface .folder-list {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.review-surface .folder-item {
+  width: auto;
+  flex: 0 0 auto;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 12px;
+  border-color: var(--line);
+  background: var(--surface-strong);
+}
+
+.review-surface .folder-item.active {
+  border-color: rgba(23, 107, 91, 0.32);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.review-surface .entry-list-wrap {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.review-surface .entry-list {
+  max-height: none;
+}
+
+.editor-header {
+  grid-template-columns: minmax(0, 1fr) minmax(190px, 260px);
+  align-items: center;
+}
+
+.editor-meta {
+  width: auto;
+  grid-template-columns: 1fr;
+}
+
+.date-token {
+  min-height: 34px;
+  background: #eef5ff;
+  color: #2867a8;
+}
+
+.title-input {
+  min-width: 0;
+}
+
+.recorder-strip {
+  margin-top: 18px;
+}
+
+.body-input {
+  min-height: 260px;
+}
+
+.bottom-tabs {
+  position: fixed;
+  z-index: 20;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: max(18px, env(safe-area-inset-bottom));
+  left: max(18px, env(safe-area-inset-left));
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  max-width: 360px;
+  margin: 0 auto;
+  padding: 8px;
+  border: 1px solid rgba(222, 216, 206, 0.9);
+  border-radius: 18px;
+  background: rgba(255, 253, 250, 0.9);
+  box-shadow: 0 18px 42px rgba(31, 28, 22, 0.18);
+  backdrop-filter: blur(18px);
+}
+
+.tab-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 48px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.tab-button span {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.tab-button strong {
+  font-size: 15px;
+}
+
+.tab-button.active {
+  background: var(--ink);
+  color: var(--surface);
+}
+
+@media (max-width: 760px) {
+  .app-main {
+    padding: 12px;
+  }
+
+  .app-header {
+    min-height: 68px;
+  }
+
+  .brand-mark {
+    width: 38px;
+    height: 38px;
+  }
+
+  .brand-row h1 {
+    font-size: 16px;
+  }
+
+  .app-header .brand-row p {
+    max-width: 68vw;
+    font-size: 11px;
+  }
+
+  .editor-header {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .editor-meta {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .date-token {
+    grid-column: 1 / -1;
+  }
+
+  .recorder-strip,
+  .recorder-main {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .record-button,
+  .secondary-action {
+    width: 100%;
+  }
+
+  .bottom-tabs {
+    max-width: none;
+  }
+}

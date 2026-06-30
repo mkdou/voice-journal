@@ -14,50 +14,24 @@
   </head>
   <body>
     <div class="app-shell">
-      <aside class="folder-panel" aria-label="文件夹">
+      <header class="app-header">
         <div class="brand-row">
           <div class="brand-mark">VJ</div>
           <div>
             <h1>Voice Journal</h1>
-            <p>录音、转写、Markdown 日记</p>
+            <p id="speechStatus">正在检测转写能力</p>
           </div>
         </div>
+      </header>
 
-        <button class="primary-action" id="newEntryBtn" type="button">新建日记</button>
-
-        <section class="panel-section">
-          <div class="section-heading">
-            <span>文件夹</span>
-            <button class="icon-button" id="addFolderBtn" type="button" title="新建文件夹">+</button>
-          </div>
-          <div class="folder-list" id="folderList"></div>
-        </section>
-      </aside>
-
-      <main class="entry-panel">
-        <header class="topbar">
-          <div class="search-wrap">
-            <input id="searchInput" type="search" placeholder="搜索标题、正文、转写..." />
-          </div>
-          <div class="status-pill" id="speechStatus">正在检测转写能力</div>
-        </header>
-
-        <section class="workspace">
-          <aside class="entry-list-wrap" aria-label="日记列表">
-            <div class="section-heading">
-              <span id="currentFolderName">全部日记</span>
-              <span class="muted-count" id="entryCount">0</span>
-            </div>
-            <div class="entry-list" id="entryList"></div>
-          </aside>
-
-          <article class="editor-surface">
+      <main class="app-main">
+        <article class="editor-surface" data-view-panel="record">
             <div class="editor-header">
               <input id="titleInput" class="title-input" placeholder="给今天起个标题" />
               <div class="editor-meta">
-                <button class="date-token" id="dateTokenBtn" type="button" title="插入固定日期"></button>
                 <input id="entryDateInput" type="date" />
                 <select id="entryFolderSelect" aria-label="移动到文件夹"></select>
+                <button class="date-token" id="dateTokenBtn" type="button" title="插入固定日期"></button>
               </div>
             </div>
 
@@ -114,9 +88,43 @@
               </div>
               <div class="segments" id="segments"></div>
             </section>
-          </article>
+        </article>
+
+        <section class="review-surface" data-view-panel="review" aria-label="回看日记" hidden>
+          <div class="review-header">
+            <div>
+              <h2>回看</h2>
+              <p>搜索、筛选和打开已经记录的日记</p>
+            </div>
+            <button class="icon-button" id="addFolderBtn" type="button" title="新建文件夹">+</button>
+          </div>
+
+          <div class="search-wrap">
+            <input id="searchInput" type="search" placeholder="搜索标题、正文、转写..." />
+          </div>
+
+          <div class="folder-list" id="folderList"></div>
+
+          <div class="entry-list-wrap" aria-label="日记列表">
+            <div class="section-heading">
+              <span id="currentFolderName">全部日记</span>
+              <span class="muted-count" id="entryCount">0</span>
+            </div>
+            <div class="entry-list" id="entryList"></div>
+          </div>
         </section>
       </main>
+
+      <nav class="bottom-tabs" aria-label="主要入口">
+        <button class="tab-button active" id="newEntryBtn" type="button">
+          <span>＋</span>
+          <strong>新建</strong>
+        </button>
+        <button class="tab-button" id="reviewTabBtn" type="button">
+          <span>⌕</span>
+          <strong>回看</strong>
+        </button>
+      </nav>
     </div>
 
     <script src="app.js"></script>
