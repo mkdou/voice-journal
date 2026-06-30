@@ -1,6 +1,7 @@
 const DB_NAME = "voice-journal-db";
 const DB_VERSION = 1;
 const TRANSCRIBE_ENDPOINT_KEY = "voiceJournalTranscribeEndpoint";
+const DEFAULT_TRANSCRIBE_ENDPOINT = "https://voice-journal-nu.vercel.app/api/transcribe";
 
 const defaultFolders = [
   { id: "daily", name: "日常" },
@@ -634,25 +635,58 @@ async function transcribeSegment(segmentId) {
     });
     appendHtmlToBody(`<h3>准确转写 · ${escapeHtml(segment.duration || "00:00")}</h3><p>${escapeHtml(text)}</p>`);
   } catch (error) {
+    const message = readableTranscribeError(error);
     await replaceSegment(segmentId, {
       transcriptionStatus: "error",
-      transcriptionError: error.message || "准确转写失败"
+      transcriptionError: message
     });
-    alert(error.message || "准确转写失败，请稍后重试。");
+    if (confirm(`${message}\n\n要重新填写准确转写服务地址吗？`)) {
+      resetTranscribeEndpoint();
+    }
   }
 }
 
 function getTranscribeEndpoint() {
-  const saved = localStorage.getItem(TRANSCRIBE_ENDPOINT_KEY);
+  const saved = normalizeEndpoint(localStorage.getItem(TRANSCRIBE_ENDPOINT_KEY));
   if (saved) return saved;
+  localStorage.removeItem(TRANSCRIBE_ENDPOINT_KEY);
 
   const sameOriginEndpoint = `${window.location.origin}/api/transcribe`;
   if (!window.location.hostname.endsWith("github.io")) return sameOriginEndpoint;
 
-  const endpoint = prompt("粘贴准确转写服务地址，例如 https://your-app.vercel.app/api/transcribe");
-  if (!endpoint?.trim()) return "";
-  localStorage.setItem(TRANSCRIBE_ENDPOINT_KEY, endpoint.trim());
-  return endpoint.trim();
+  localStorage.setItem(TRANSCRIBE_ENDPOINT_KEY, DEFAULT_TRANSCRIBE_ENDPOINT);
+  return DEFAULT_TRANSCRIBE_ENDPOINT;
+}
+
+function resetTranscribeEndpoint() {
+  const endpoint = prompt("粘贴准确转写服务地址", getTranscribeEndpoint());
+  const normalized = normalizeEndpoint(endpoint);
+  if (!normalized) {
+    alert("地址需要是 https 开头，并且以 /api/transcribe 结尾。");
+    return;
+  }
+  localStorage.setItem(TRANSCRIBE_ENDPOINT_KEY, normalized);
+}
+
+function normalizeEndpoint(value) {
+  const endpoint = String(value || "").trim();
+  if (!endpoint) return "";
+  try {
+    const url = new URL(endpoint);
+    if (url.protocol !== "https:") return "";
+    if (!url.pathname.endsWith("/api/transcribe")) return "";
+    return url.toString();
+  } catch {
+    return "";
+  }
+}
+
+function readableTranscribeError(error) {
+  const message = String(error?.message || "");
+  if (message === "Failed to fetch" || message.includes("NetworkError")) {
+    return "准确转写服务连接失败。请检查接口地址、网络、浏览器插件，或稍后重试。";
+  }
+  return message || "准确转写失败，请稍后重试。";
 }
 
 function blobToBase64(blob) {
