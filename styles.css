@@ -337,7 +337,7 @@ button {
 
 .recorder-strip {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 14px;
   align-items: center;
   margin: 20px 0 12px;
@@ -345,6 +345,13 @@ button {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #f8f6f1;
+}
+
+.recorder-main {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  min-width: 0;
 }
 
 .record-button {
@@ -383,11 +390,34 @@ button {
 }
 
 .record-stats span {
-  overflow: hidden;
   color: var(--muted);
   font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.35;
+}
+
+.live-transcript {
+  grid-column: 1 / -1;
+  min-height: 58px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-strong);
+}
+
+.live-label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.live-transcript p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
 }
 
 .toolbar {
@@ -442,6 +472,28 @@ button {
   padding-left: 13px;
   border-left: 3px solid var(--line);
   color: var(--muted);
+}
+
+.body-input ul {
+  margin: 0.6em 0;
+  padding-left: 1.4em;
+}
+
+.body-input li {
+  margin: 0.25em 0;
+}
+
+.todo-line {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  margin: 0.55em 0;
+}
+
+.todo-line input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
 }
 
 .date-chip {
@@ -547,6 +599,11 @@ button {
   font-size: 12px;
 }
 
+.segment-duration {
+  font-weight: 800;
+  color: var(--ink);
+}
+
 .segment-text {
   margin: 0;
   white-space: pre-wrap;
@@ -609,6 +666,10 @@ button {
 
   .topbar {
     align-items: stretch;
+  }
+
+  .recorder-main {
+    align-items: flex-start;
   }
 
   .status-pill,

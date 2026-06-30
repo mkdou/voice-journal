@@ -62,15 +62,21 @@
             </div>
 
             <div class="recorder-strip">
-              <button class="record-button" id="recordBtn" type="button">
-                <span class="record-dot"></span>
-                <span id="recordLabel">开始录音</span>
-              </button>
-              <div class="record-stats">
-                <strong id="recordTimer">00:00</strong>
-                <span id="recordHint">录音会保存在当前日记里</span>
+              <div class="recorder-main">
+                <button class="record-button" id="recordBtn" type="button">
+                  <span class="record-dot"></span>
+                  <span id="recordLabel">开始录音</span>
+                </button>
+                <div class="record-stats">
+                  <strong id="recordTimer">00:00</strong>
+                  <span id="recordHint">录音会保存在当前日记里</span>
+                </div>
               </div>
               <button class="secondary-action" id="saveSegmentBtn" type="button">保存当前分段</button>
+              <div class="live-transcript" id="liveTranscriptBox">
+                <span class="live-label">实时转写草稿</span>
+                <p id="liveTranscriptText">开始录音后，这里会显示浏览器实时识别到的中文。准确版可后续接入云端转写。</p>
+              </div>
             </div>
 
             <div class="toolbar" aria-label="Markdown 工具栏">
@@ -78,7 +84,7 @@
               <button type="button" data-md="italic" title="斜体"><i>I</i></button>
               <button type="button" data-md="heading" title="标题">H</button>
               <button type="button" data-md="quote" title="引用">"</button>
-              <button type="button" data-md="list" title="列表">-</button>
+              <button type="button" data-md="list" title="列表">•</button>
               <button type="button" data-md="check" title="待办">☐</button>
               <button type="button" data-md="date" title="固定日期">今天</button>
               <button type="button" data-md="divider" title="分隔线">---</button>

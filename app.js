@@ -49,6 +49,8 @@ const el = {
   recordLabel: document.querySelector("#recordLabel"),
   recordTimer: document.querySelector("#recordTimer"),
   recordHint: document.querySelector("#recordHint"),
+  liveTranscriptBox: document.querySelector("#liveTranscriptBox"),
+  liveTranscriptText: document.querySelector("#liveTranscriptText"),
   saveSegmentBtn: document.querySelector("#saveSegmentBtn"),
   bodyInput: document.querySelector("#bodyInput"),
   slashHelper: document.querySelector("#slashHelper"),
@@ -259,7 +261,7 @@ function renderSegments(entry) {
       <div class="segment-card">
         <div class="segment-top">
           <span>分段 ${index + 1} · ${escapeHtml(formatDateTime(segment.createdAt))}</span>
-          <span>${escapeHtml(segment.duration || "00:00")}</span>
+          <span class="segment-duration">录音时长 ${escapeHtml(segment.duration || "00:00")}</span>
         </div>
         ${audioUrl ? `<audio controls src="${audioUrl}"></audio>` : ""}
         <p class="segment-text">${escapeHtml(segment.text || "这段录音暂时没有转写文字。")}</p>
@@ -309,11 +311,43 @@ function normalizeBodyHtml(value) {
   const raw = String(value || "");
   if (!raw.trim()) return "";
   const withDateChips = raw.replace(/&lt;date value="(\d{4}-\d{2}-\d{2})"&gt;.*?&lt;\/date&gt;|<date value="(\d{4}-\d{2}-\d{2})">.*?<\/date>/g, (_match, escapedDate, htmlDate) => dateChipHtml(escapedDate || htmlDate));
-  if (/<[a-z][\s\S]*>/i.test(withDateChips)) return withDateChips;
+  if (/<[a-z][\s\S]*>/i.test(withDateChips)) return cleanLegacyMarkdownHtml(withDateChips);
   return withDateChips
     .split(/\n{2,}/)
-    .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`)
+    .map((paragraph) => blockFromPlainText(paragraph))
     .join("");
+}
+
+function cleanLegacyMarkdownHtml(html) {
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  template.content.querySelectorAll("p, div").forEach((node) => {
+    if (node.classList.contains("craft-block")) return;
+    const text = node.textContent.trim();
+    if (!text) return;
+    const replacement = blockFromPlainText(text);
+    if (replacement !== `<p>${escapeHtml(text)}</p>`) {
+      node.outerHTML = replacement;
+    } else {
+      node.innerHTML = inlineMarkdownToHtml(text);
+    }
+  });
+  return template.innerHTML;
+}
+
+function blockFromPlainText(text) {
+  const value = text.trim();
+  if (value.startsWith("## ")) return `<h2>${inlineMarkdownToHtml(value.slice(3))}</h2>`;
+  if (value.startsWith("> ")) return `<blockquote>${inlineMarkdownToHtml(value.slice(2))}</blockquote>`;
+  if (value.startsWith("- [ ] ")) return `<label class="todo-line"><input type="checkbox"> <span>${inlineMarkdownToHtml(value.slice(6))}</span></label>`;
+  if (value.startsWith("- ")) return `<ul><li>${inlineMarkdownToHtml(value.slice(2))}</li></ul>`;
+  return `<p>${inlineMarkdownToHtml(value).replace(/\n/g, "<br>")}</p>`;
+}
+
+function inlineMarkdownToHtml(text) {
+  return escapeHtml(text)
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*([^*]+)\*/g, "<em>$1</em>");
 }
 
 function saveBodyFromEditor() {
@@ -410,14 +444,20 @@ function refreshDateChips() {
 }
 
 function applyMarkdown(action) {
+  el.bodyInput.focus();
   const selected = window.getSelection()?.toString() || "";
+  if (action === "bold" || action === "italic") {
+    document.execCommand(action === "bold" ? "bold" : "italic", false);
+    if (!selected) insertAtCursor(action === "bold" ? "<strong>加粗文字</strong>" : "<em>斜体文字</em>");
+    saveBodyFromEditor();
+    return;
+  }
+
   const snippets = {
-    bold: `<strong>${escapeHtml(selected || "加粗文字")}</strong>`,
-    italic: `<em>${escapeHtml(selected || "斜体文字")}</em>`,
     heading: `<h2>${escapeHtml(selected || "小标题")}</h2>`,
     quote: `<blockquote>${escapeHtml(selected || "引用")}</blockquote>`,
-    list: `<p>- ${escapeHtml(selected || "列表项")}</p>`,
-    check: `<p>- [ ] ${escapeHtml(selected || "待办")}</p>`,
+    list: `<ul><li>${escapeHtml(selected || "列表项")}</li></ul>`,
+    check: `<label class="todo-line"><input type="checkbox"> <span>${escapeHtml(selected || "待办")}</span></label>`,
     date: fixedDateMarkdown(),
     divider: `<div class="craft-block"><br></div><p><br></p>`
   };
@@ -429,7 +469,7 @@ function runSlashCommand(command) {
     date: fixedDateMarkdown(),
     time: new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit" }).format(new Date()),
     heading: "<h2><br></h2>",
-    todo: "<p>- [ ] </p>",
+    todo: `<label class="todo-line"><input type="checkbox"> <span>待办</span></label>`,
     audio: "<p>录音分段见下方</p>"
   };
   insertAtCursor(map[command] || "", true);
@@ -453,12 +493,14 @@ function setupSpeechRecognition() {
       const text = event.results[i][0].transcript.trim();
       if (event.results[i].isFinal) {
         state.liveTranscript += `${text}\n`;
+        updateLiveTranscript();
         appendTranscriptToBody(text);
       } else {
         interim = text;
       }
     }
-    el.recordHint.textContent = interim ? `正在转写：${interim}` : "正在监听中文语音";
+    el.recordHint.textContent = interim ? "正在转写草稿" : "正在监听中文语音";
+    updateLiveTranscript(interim);
   };
   recognition.onerror = () => {
     el.recordHint.textContent = "转写中断，录音仍会保存";
@@ -487,6 +529,24 @@ function appendTranscriptToBody(text) {
   updateActiveEntry({ body: nextBody });
 }
 
+function appendHtmlToBody(html) {
+  const entry = activeEntry();
+  if (!entry || !html) return;
+  const nextBody = `${normalizeBodyHtml(entry.body)}${html}`;
+  entry.body = nextBody;
+  el.bodyInput.innerHTML = nextBody;
+  refreshDateChips();
+  updateActiveEntry({ body: nextBody });
+}
+
+function updateLiveTranscript(interim = "") {
+  const finalText = state.liveTranscript.trim();
+  const parts = [];
+  if (finalText) parts.push(finalText);
+  if (interim) parts.push(`…${interim}`);
+  el.liveTranscriptText.textContent = parts.join("\n") || "正在听，请继续说。";
+}
+
 async function toggleRecording() {
   if (state.recorder?.state === "recording") {
     stopRecording();
@@ -502,6 +562,7 @@ async function startRecording() {
   state.chunks = [];
   state.segmentChunks = [];
   state.liveTranscript = "";
+  el.liveTranscriptText.textContent = "正在听，请继续说。";
   state.stopRequested = false;
   state.recordingStartedAt = Date.now();
   state.segmentStartedAt = Date.now();
@@ -541,6 +602,7 @@ async function startRecording() {
   el.recordBtn.classList.add("recording");
   el.recordLabel.textContent = "停止录音";
   el.recordHint.textContent = "正在录音并实时转写";
+  updateLiveTranscript();
   state.timerId = window.setInterval(() => {
     el.recordTimer.textContent = formatTimer(Date.now() - state.recordingStartedAt);
   }, 250);
@@ -608,6 +670,7 @@ async function saveRecordingSegment() {
   await updateActiveEntry({ segments: [...(entry.segments || []), segment] });
   state.segmentChunks = [];
   state.liveTranscript = "";
+  el.liveTranscriptText.textContent = text || "这一段没有拿到可用的实时转写。录音已保存，可回听。";
   el.recordHint.textContent = "录音和转写已保存到当前日记";
 }
 
@@ -617,9 +680,12 @@ function saveCurrentSegmentWhileRecording() {
   window.setTimeout(async () => {
     const text = state.liveTranscript.trim();
     await saveRecordingSegment();
-    if (text) appendTranscriptToBody(`\n### 分段 ${formatTimer(Date.now() - state.recordingStartedAt)}\n${text}`);
+    if (text) {
+      appendHtmlToBody(`<h3>分段 ${formatTimer(Date.now() - state.recordingStartedAt)}</h3><p>${escapeHtml(text)}</p>`);
+    }
     state.liveTranscript = "";
     state.segmentStartedAt = Date.now();
+    el.liveTranscriptText.textContent = "新分段已开始，继续说即可。";
     el.recordHint.textContent = "已保存一个独立分段，继续录音";
   }, 80);
 }
