@@ -292,12 +292,24 @@ function renderReviewDetail() {
   }
   state.reviewEntryId = entry.id;
   const folder = state.folders.find((item) => item.id === entry.folderId)?.name || "日记";
-  const transcript = (entry.segments || [])
+  const sortedSegments = (entry.segments || [])
     .slice()
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-    .map((segment) => segmentText(segment))
-    .filter(Boolean)
-    .join("\n\n");
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const reviewSegments = sortedSegments.map((segment, index) => {
+    const audioUrl = segmentAudioUrl(segment);
+    const text = segmentText(segment);
+    return `
+      <section class="review-segment">
+        <div class="segment-top">
+          <span>录音 ${index + 1} · ${escapeHtml(formatDateTime(segment.createdAt))}</span>
+          <span class="segment-duration">${escapeHtml(segment.duration || "00:00")}</span>
+        </div>
+        ${audioUrl ? `<audio controls src="${audioUrl}"></audio>` : `<div class="missing-audio">这段没有保存到录音文件，只保留了转写文字。</div>`}
+        ${text ? `<p class="segment-text">${escapeHtml(text)}</p>` : ""}
+        ${audioUrl ? `<div class="segment-actions"><a href="${audioUrl}" download="${escapeHtml(entry.date)}-${index + 1}.webm">下载录音</a></div>` : ""}
+      </section>
+    `;
+  }).join("");
   el.reviewDetail.innerHTML = `
     <div class="review-detail-head">
       <div>
@@ -307,7 +319,13 @@ function renderReviewDetail() {
       <button class="secondary-action" type="button" data-edit-review-entry="${entry.id}">编辑</button>
     </div>
     <div class="review-body">${normalizeBodyHtml(entry.body) || "<p>这篇还没有正文。</p>"}</div>
-    ${transcript ? `<pre class="review-transcript">${escapeHtml(transcript)}</pre>` : ""}
+    <div class="review-segments">
+      <div class="section-heading">
+        <span>录音与转写</span>
+        <span class="muted-count">${sortedSegments.length}</span>
+      </div>
+      ${reviewSegments || `<div class="empty-state">这篇还没有录音分段。</div>`}
+    </div>
   `;
   refreshDateChipsIn(el.reviewDetail);
 }

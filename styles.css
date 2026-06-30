@@ -1032,6 +1032,34 @@ button {
   white-space: pre-wrap;
 }
 
+.review-segments {
+  display: grid;
+  gap: 10px;
+}
+
+.review-segment {
+  display: grid;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfaf6;
+}
+
+.review-segment audio {
+  width: 100%;
+}
+
+.missing-audio {
+  padding: 10px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--danger);
+  background: #fff9f7;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .date-chip {
   cursor: pointer;
 }
