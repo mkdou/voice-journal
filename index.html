@@ -92,7 +92,14 @@
               <button type="button" data-command="audio">录音 - 插入录音索引</button>
             </div>
 
-            <textarea id="bodyInput" class="body-input" placeholder="输入 / 呼出日期、标题、待办等块。录音转写会自动追加到这里。"></textarea>
+            <div
+              id="bodyInput"
+              class="body-input"
+              contenteditable="true"
+              role="textbox"
+              aria-multiline="true"
+              data-placeholder="输入 / 呼出日期块；输入 === 生成白色方块。录音转写会自动追加到这里。"
+            ></div>
 
             <section class="transcript-panel">
               <div class="section-heading">

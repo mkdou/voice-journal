@@ -7,13 +7,11 @@ const defaultFolders = [
   { id: "review", name: "复盘" }
 ];
 
-const sampleBody = `# 今天的记录
-
-/今天 可以插入固定日期。你也可以直接开始录音，转写文本会自动追加到这里。
-
-- 心情：
-- 重要事情：
-- 明天继续：`;
+const sampleBody = `<h2>今天的记录</h2>
+<p>输入 <strong>/今天</strong> 可以插入固定日期；输入 <strong>===</strong> 可以生成白色方块。你也可以直接开始录音，转写文本会自动追加到这里。</p>
+<p>- 心情：</p>
+<p>- 重要事情：</p>
+<p>- 明天继续：</p>`;
 
 const state = {
   db: null,
@@ -82,6 +80,15 @@ function formatTimer(ms) {
   const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
   const seconds = String(totalSeconds % 60).padStart(2, "0");
   return `${minutes}:${seconds}`;
+}
+
+function weekdayName(dateText) {
+  return new Intl.DateTimeFormat("zh-CN", { weekday: "short" }).format(new Date(`${dateText}T00:00:00`));
+}
+
+function displayDate(dateText) {
+  const date = new Date(`${dateText}T00:00:00`);
+  return new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric" }).format(date);
 }
 
 function openDb() {
@@ -160,7 +167,7 @@ function filteredEntries() {
   const search = state.search.trim().toLowerCase();
   return state.entries.filter((entry) => {
     const inFolder = state.activeFolderId === "all" || entry.folderId === state.activeFolderId;
-    const text = `${entry.title} ${entry.body} ${(entry.segments || []).map((segment) => segment.text).join(" ")}`.toLowerCase();
+    const text = `${entry.title} ${plainText(entry.body)} ${(entry.segments || []).map((segment) => segment.text).join(" ")}`.toLowerCase();
     return inFolder && (!search || text.includes(search));
   });
 }
@@ -202,7 +209,7 @@ function renderEntries() {
   }
 
   el.entryList.innerHTML = entries.map((entry) => {
-    const preview = (entry.body || (entry.segments || []).map((segment) => segment.text).join(" ") || "还没有正文").replace(/\s+/g, " ").trim();
+    const preview = (plainText(entry.body) || (entry.segments || []).map((segment) => segment.text).join(" ") || "还没有正文").replace(/\s+/g, " ").trim();
     return `
       <button class="entry-item ${entry.id === state.activeEntryId ? "active" : ""}" data-entry-id="${entry.id}" type="button">
         <span class="entry-title">${escapeHtml(entry.title || "未命名日记")}</span>
@@ -216,19 +223,23 @@ function renderEntries() {
 function renderEditor() {
   const entry = activeEntry();
   const disabled = !entry;
-  [el.titleInput, el.entryDateInput, el.entryFolderSelect, el.bodyInput, el.recordBtn, el.saveSegmentBtn].forEach((node) => {
+  [el.titleInput, el.entryDateInput, el.entryFolderSelect, el.recordBtn, el.saveSegmentBtn].forEach((node) => {
     node.disabled = disabled;
   });
+  el.bodyInput.contentEditable = disabled ? "false" : "true";
 
   if (!entry) {
     el.titleInput.value = "";
-    el.bodyInput.value = "";
+    el.bodyInput.innerHTML = "";
     el.segments.innerHTML = `<div class="empty-state">选择或新建一篇日记。</div>`;
     return;
   }
 
   if (document.activeElement !== el.titleInput) el.titleInput.value = entry.title;
-  if (document.activeElement !== el.bodyInput) el.bodyInput.value = entry.body;
+  if (document.activeElement !== el.bodyInput) {
+    el.bodyInput.innerHTML = normalizeBodyHtml(entry.body);
+    refreshDateChips();
+  }
   el.entryDateInput.value = entry.date;
   el.entryFolderSelect.value = entry.folderId;
   el.dateTokenBtn.textContent = `固定日期 · ${entry.date}`;
@@ -270,6 +281,16 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+function plainText(html) {
+  const template = document.createElement("template");
+  template.innerHTML = normalizeBodyHtml(html);
+  template.content.querySelectorAll(".date-chip[data-date]").forEach((chip) => {
+    const date = chip.dataset.date;
+    chip.textContent = date === todayISO() ? "今天" : `${displayDate(date)} ${weekdayName(date)}`;
+  });
+  return template.content.textContent || "";
+}
+
 async function updateActiveEntry(patch) {
   const entry = activeEntry();
   if (!entry) return;
@@ -280,35 +301,125 @@ async function updateActiveEntry(patch) {
   render();
 }
 
-function insertAtCursor(text, replaceSlash = false) {
-  const input = el.bodyInput;
-  const start = replaceSlash ? Math.max(0, input.selectionStart - 1) : input.selectionStart;
-  const end = input.selectionEnd;
-  input.value = `${input.value.slice(0, start)}${text}${input.value.slice(end)}`;
-  const nextCursor = start + text.length;
-  input.focus();
-  input.setSelectionRange(nextCursor, nextCursor);
-  updateActiveEntry({ body: input.value });
+function bodyHtml() {
+  return el.bodyInput.innerHTML.trim();
+}
+
+function normalizeBodyHtml(value) {
+  const raw = String(value || "");
+  if (!raw.trim()) return "";
+  const withDateChips = raw.replace(/&lt;date value="(\d{4}-\d{2}-\d{2})"&gt;.*?&lt;\/date&gt;|<date value="(\d{4}-\d{2}-\d{2})">.*?<\/date>/g, (_match, escapedDate, htmlDate) => dateChipHtml(escapedDate || htmlDate));
+  if (/<[a-z][\s\S]*>/i.test(withDateChips)) return withDateChips;
+  return withDateChips
+    .split(/\n{2,}/)
+    .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`)
+    .join("");
+}
+
+function saveBodyFromEditor() {
+  refreshDateChips();
+  updateActiveEntry({ body: bodyHtml() });
+}
+
+function handleEditorShortcuts() {
+  const text = el.bodyInput.textContent || "";
+  if (text.endsWith("/")) {
+    el.slashHelper.hidden = false;
+  } else {
+    el.slashHelper.hidden = true;
+  }
+
+  if (text.endsWith("===") && replaceTrailingEqualsWithBlock()) {
+    refreshDateChips();
+  }
+}
+
+function replaceTrailingEqualsWithBlock() {
+  const walker = document.createTreeWalker(el.bodyInput, 4);
+  const nodes = [];
+  let node = walker.nextNode();
+  while (node) {
+    nodes.push(node);
+    node = walker.nextNode();
+  }
+
+  for (let i = nodes.length - 1; i >= 0; i -= 1) {
+    const textNode = nodes[i];
+    if (!textNode.nodeValue.endsWith("===")) continue;
+    textNode.nodeValue = textNode.nodeValue.slice(0, -3);
+    const parent = textNode.parentElement || el.bodyInput;
+    const target = parent.closest(".caret-spacer") || parent;
+    target.insertAdjacentHTML("afterend", `<div class="craft-block"><br></div><p><br></p>`);
+    placeCaretAtEnd(el.bodyInput);
+    return true;
+  }
+  return false;
+}
+
+function placeCaretAtEnd(node) {
+  const range = document.createRange();
+  const selection = window.getSelection();
+  range.selectNodeContents(node);
+  range.collapse(false);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+function insertAtCursor(html, replaceSlash = false) {
+  el.bodyInput.focus();
+  if (replaceSlash) deletePreviousCharacter();
+  document.execCommand("insertHTML", false, html);
+  refreshDateChips();
+  saveBodyFromEditor();
+}
+
+function deletePreviousCharacter() {
+  deletePreviousCharacters(1);
+}
+
+function deletePreviousCharacters(count) {
+  const selection = window.getSelection();
+  if (!selection?.rangeCount) return;
+  for (let i = 0; i < count; i += 1) {
+    const range = selection.getRangeAt(0);
+    if (!range.collapsed) {
+      range.deleteContents();
+      return;
+    }
+    document.execCommand("delete", false);
+  }
 }
 
 function fixedDateMarkdown() {
   const entry = activeEntry();
   const date = entry?.date || todayISO();
-  return `<date value="${date}">${date}</date>`;
+  return dateChipHtml(date);
+}
+
+function dateChipHtml(date) {
+  return `<span class="date-chip" contenteditable="false" data-date="${date}">今天</span><span class="caret-spacer">&nbsp;</span>`;
+}
+
+function refreshDateChips() {
+  el.bodyInput.querySelectorAll(".date-chip[data-date]").forEach((chip) => {
+    const date = chip.dataset.date;
+    const isToday = date === todayISO();
+    chip.classList.toggle("past", !isToday);
+    chip.textContent = isToday ? "今天" : `${displayDate(date)} ${weekdayName(date)}`;
+  });
 }
 
 function applyMarkdown(action) {
-  const input = el.bodyInput;
-  const selected = input.value.slice(input.selectionStart, input.selectionEnd);
+  const selected = window.getSelection()?.toString() || "";
   const snippets = {
-    bold: `**${selected || "加粗文字"}**`,
-    italic: `*${selected || "斜体文字"}*`,
-    heading: `\n## ${selected || "小标题"}\n`,
-    quote: `\n> ${selected || "引用"}\n`,
-    list: `\n- ${selected || "列表项"}\n`,
-    check: `\n- [ ] ${selected || "待办"}\n`,
+    bold: `<strong>${escapeHtml(selected || "加粗文字")}</strong>`,
+    italic: `<em>${escapeHtml(selected || "斜体文字")}</em>`,
+    heading: `<h2>${escapeHtml(selected || "小标题")}</h2>`,
+    quote: `<blockquote>${escapeHtml(selected || "引用")}</blockquote>`,
+    list: `<p>- ${escapeHtml(selected || "列表项")}</p>`,
+    check: `<p>- [ ] ${escapeHtml(selected || "待办")}</p>`,
     date: fixedDateMarkdown(),
-    divider: `\n---\n`
+    divider: `<div class="craft-block"><br></div><p><br></p>`
   };
   insertAtCursor(snippets[action] || "");
 }
@@ -317,9 +428,9 @@ function runSlashCommand(command) {
   const map = {
     date: fixedDateMarkdown(),
     time: new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit" }).format(new Date()),
-    heading: "## ",
-    todo: "- [ ] ",
-    audio: "\n[录音分段见下方]\n"
+    heading: "<h2><br></h2>",
+    todo: "<p>- [ ] </p>",
+    audio: "<p>录音分段见下方</p>"
   };
   insertAtCursor(map[command] || "", true);
   el.slashHelper.hidden = true;
@@ -368,10 +479,11 @@ function setupSpeechRecognition() {
 function appendTranscriptToBody(text) {
   const entry = activeEntry();
   if (!entry || !text) return;
-  const prefix = entry.body.trim() ? "\n\n" : "";
-  const nextBody = `${entry.body}${prefix}${text}`;
+  const prefix = entry.body.trim() ? "" : "";
+  const nextBody = `${normalizeBodyHtml(entry.body)}${prefix}<p>${escapeHtml(text)}</p>`;
   entry.body = nextBody;
-  el.bodyInput.value = nextBody;
+  el.bodyInput.innerHTML = nextBody;
+  refreshDateChips();
   updateActiveEntry({ body: nextBody });
 }
 
@@ -553,9 +665,12 @@ function bindEvents() {
 
   el.titleInput.addEventListener("input", () => updateActiveEntry({ title: el.titleInput.value }));
   el.bodyInput.addEventListener("input", () => {
-    updateActiveEntry({ body: el.bodyInput.value });
-    const beforeCursor = el.bodyInput.value.slice(0, el.bodyInput.selectionStart);
-    el.slashHelper.hidden = !beforeCursor.endsWith("/");
+    handleEditorShortcuts();
+    saveBodyFromEditor();
+  });
+  el.bodyInput.addEventListener("keyup", () => {
+    handleEditorShortcuts();
+    saveBodyFromEditor();
   });
   el.entryDateInput.addEventListener("change", () => updateActiveEntry({ date: el.entryDateInput.value }));
   el.entryFolderSelect.addEventListener("change", () => updateActiveEntry({ folderId: el.entryFolderSelect.value }));
@@ -584,7 +699,7 @@ function bindEvents() {
     if (!button) return;
     const entry = activeEntry();
     const segment = entry?.segments?.find((item) => item.id === button.dataset.appendSegment);
-    if (segment?.text) insertAtCursor(`\n\n${segment.text}`);
+    if (segment?.text) insertAtCursor(`<p>${escapeHtml(segment.text)}</p>`);
   });
 
   el.copyTranscriptBtn.addEventListener("click", async () => {
