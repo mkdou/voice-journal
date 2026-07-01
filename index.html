@@ -10,7 +10,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="icon.svg" />
-    <link rel="stylesheet" href="styles.css?v=craft-v7" />
+    <link rel="stylesheet" href="styles.css?v=craft-v8" />
   </head>
   <body>
     <div class="app-shell">
@@ -128,10 +128,9 @@
       </section>
 
       <nav class="mobile-tabbar" aria-label="手机底部导航">
-        <button class="active" type="button" data-mobile-tab="today"><span data-icon="calendar"></span><small>今天</small></button>
+        <button class="active" type="button" data-mobile-tab="today"><span class="tab-emoji" aria-hidden="true">📅</span><small>今天</small></button>
         <button type="button" data-mobile-tab="diary"><span class="tab-emoji" aria-hidden="true">📔</span><small>日记</small></button>
-        <button class="record-tab" type="button" data-mobile-record><span data-icon="mic"></span><small>录音</small></button>
-        <button type="button" data-mobile-tab="settings"><span data-icon="settings"></span><small>设置</small></button>
+        <button type="button" data-mobile-tab="settings"><span class="tab-emoji" aria-hidden="true">⚙️</span><small>设置</small></button>
       </nav>
 
       <div class="sheet-backdrop" id="sheetBackdrop" hidden></div>
@@ -177,6 +176,6 @@
     <input id="imagePicker" type="file" accept="image/*" hidden />
     <input id="coverPicker" type="file" accept="image/*" hidden />
     <input id="coverLibraryPicker" type="file" accept="image/*" multiple hidden />
-    <script src="app.js?v=craft-v7"></script>
+    <script src="app.js?v=craft-v8"></script>
   </body>
 </html>

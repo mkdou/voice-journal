@@ -610,7 +610,7 @@ function renderAudioBlock(block, menu) {
         <button type="button" data-copy-transcript="${block.id}">复制转写</button>
         <button type="button" data-organize-transcript="${block.id}">整理成日记</button>
       </div>
-      ${block.audioId || block.audioDataUrl ? `<audio class="sr-audio" preload="metadata" data-audio="${block.id}" data-audio-id="${escapeHtml(block.audioId || "")}" ${block.audioDataUrl ? `src="${block.audioDataUrl}"` : ""}></audio>` : `<div class="playback-error">这段录音没有可播放文件。</div>`}
+      ${block.audioId || block.audioDataUrl ? `<audio class="sr-audio" preload="metadata" playsinline data-audio="${block.id}" data-audio-id="${escapeHtml(block.audioId || "")}" ${block.audioDataUrl ? `src="${block.audioDataUrl}"` : ""}></audio>` : `<div class="playback-error">这段录音没有可播放文件。</div>`}
       ${menu}
     </section>
   `;
@@ -720,6 +720,7 @@ function attachAudioListeners() {
     ensureAudioSource(audio, block).catch(() => showPlaybackError(blockId, "录音文件读取失败，请重新录一段。"));
     audio.addEventListener("loadedmetadata", () => {
       if (progress && Number.isFinite(audio.duration)) progress.max = Math.max(1, Math.round(audio.duration));
+      syncBlockDurationFromAudio(blockId, audio.duration);
     });
     audio.addEventListener("timeupdate", () => {
       if (progress) progress.value = Math.round(audio.currentTime);
@@ -748,6 +749,23 @@ async function ensureAudioSource(audio, block) {
   if (!block.audioId) return false;
   await hydrateAudioSource(audio, block);
   return hasAudioSource(audio);
+}
+
+function syncBlockDurationFromAudio(blockId, durationSeconds) {
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return;
+  const entry = activeEntry();
+  const block = entry?.blocks.find((item) => item.id === blockId);
+  if (!block) return;
+  const actualMs = Math.round(durationSeconds * 1000);
+  if (Math.abs((block.durationMs || 0) - actualMs) < 900) return;
+  block.durationMs = actualMs;
+  block.duration = formatDuration(actualMs);
+  touchEntry(entry);
+  queueSave();
+  const total = el.blockList.querySelector(`[data-player="${blockId}"] .player-time:last-child`);
+  const progress = el.blockList.querySelector(`[data-progress="${blockId}"]`);
+  if (total) total.textContent = block.duration;
+  if (progress) progress.max = Math.max(1, Math.round(durationSeconds));
 }
 
 async function hydrateAudioSource(audio, block) {
@@ -1543,11 +1561,6 @@ function bindEvents() {
       renderMobileView();
     });
   });
-  document.querySelector("[data-mobile-record]")?.addEventListener("click", () => {
-    state.mobileTab = "today";
-    renderMobileView();
-    handleInsert("audio", { autoStart: true });
-  });
   el.imagePicker.addEventListener("change", () => handleImageFile(el.imagePicker.files[0]));
   el.coverPicker.addEventListener("change", () => handleCoverFile(el.coverPicker.files[0]));
   el.coverLibraryPicker?.addEventListener("change", () => {
@@ -1656,7 +1669,7 @@ async function init() {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("./sw.js?v=27").then((registration) => registration.update()).catch(() => {});
+  navigator.serviceWorker.register("./sw.js?v=28").then((registration) => registration.update()).catch(() => {});
 }
 
 init().catch((error) => {
