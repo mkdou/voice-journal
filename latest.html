@@ -10,7 +10,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="icon.svg" />
-    <link rel="stylesheet" href="styles.css?v=craft-v2" />
+    <link rel="stylesheet" href="styles.css?v=craft-v3" />
   </head>
   <body>
     <div class="app-shell">
@@ -24,9 +24,9 @@
           </div>
         </div>
 
-        <button class="new-entry-button" id="newEntryBtn" type="button">＋ 新建日记</button>
+        <button class="new-entry-button" id="newEntryBtn" type="button"><span data-icon="plus"></span> 新建日记</button>
         <label class="search-box">
-          <span>⌕</span>
+          <span data-icon="search"></span>
           <input id="searchInput" type="search" placeholder="搜索日记" />
         </label>
 
@@ -38,37 +38,38 @@
         </section>
 
         <div class="hint-card">
-          <button id="closeHintBtn" type="button">×</button>
+          <button id="closeHintBtn" type="button" aria-label="关闭"><span data-icon="close"></span></button>
           <strong>提示</strong>
           <span>用下方工具条插入内容块，录音会保存在当前位置。</span>
         </div>
       </aside>
 
       <main class="main-stage mobile-page active" data-mobile-page="today">
-        <div class="cover">
+        <div class="cover" id="coverArea">
           <div class="cover-actions">
-            <button type="button">分享</button>
-            <button type="button">格式</button>
-            <button type="button">···</button>
+            <button type="button" id="changeCoverBtn">更换封面</button>
+            <button type="button" id="resetCoverBtn">恢复默认</button>
+            <button type="button" aria-label="更多"><span data-icon="more"></span></button>
           </div>
           <p>听见生活，记录此刻</p>
         </div>
 
         <article class="paper">
           <div class="doc-meta">
-            <button class="date-pill" id="insertDateTopBtn" type="button">▦ 今天</button>
+            <button class="date-pill" id="insertDateTopBtn" type="button"><span data-icon="calendar"></span> 今天</button>
           </div>
           <input class="doc-title" id="titleInput" placeholder="今天的标题" />
           <input class="doc-subtitle" id="subtitleInput" placeholder="写下今天的感受..." />
           <div class="block-list" id="blockList"></div>
         </article>
 
-        <div class="floating-toolbar" aria-label="插入块">
-          <button type="button" data-insert="text">＋</button>
-          <button type="button" data-insert="text">T</button>
-          <button type="button" data-insert="image">▧</button>
-          <button type="button" data-insert="audio">🎙</button>
-          <button type="button" data-insert="date">▦</button>
+        <div class="floating-toolbar editor-toolbar" id="editorToolbar" aria-label="插入块">
+          <button type="button" data-open-insert-menu aria-label="插入块"><span data-icon="plus"></span></button>
+          <button type="button" data-insert="text" aria-label="文字"><span data-icon="text"></span></button>
+          <button type="button" data-insert="image" aria-label="图片"><span data-icon="image"></span></button>
+          <button type="button" data-insert="audio-start" aria-label="录音"><span data-icon="mic"></span></button>
+          <button type="button" data-insert="date" aria-label="日期"><span data-icon="calendar"></span></button>
+          <button type="button" data-open-insert-menu aria-label="更多"><span data-icon="more"></span></button>
         </div>
       </main>
 
@@ -76,13 +77,13 @@
         <div class="dock-tabs">
           <button class="active" type="button">录音</button>
           <button type="button">块导航</button>
-          <button id="closeDockBtn" type="button">×</button>
+          <button id="closeDockBtn" type="button" aria-label="关闭"><span data-icon="close"></span></button>
         </div>
 
         <section class="dock-section">
           <h2>插入录音块</h2>
           <p>在光标位置插入新的声音记录，录完会保留播放器、时长和实时转写。</p>
-          <button class="record-cta" id="recordBtn" type="button">🎙 开始说话</button>
+          <button class="record-cta" id="recordBtn" type="button"><span data-icon="mic"></span> 开始说话</button>
           <span class="shortcut">快捷键 ⌘ R</span>
         </section>
 
@@ -107,7 +108,7 @@
         <div class="mobile-panel-card">
           <h2>灵感</h2>
           <p>快速收集还没有整理成日记的想法。第一版先作为入口保留，后面可以接模板和灵感箱。</p>
-          <button class="panel-action" type="button" data-insert-mobile="text">＋ 写一条灵感</button>
+          <button class="panel-action" type="button" data-insert-mobile="text"><span data-icon="plus"></span> 写一条灵感</button>
         </div>
       </section>
 
@@ -125,15 +126,29 @@
       </section>
 
       <nav class="mobile-tabbar" aria-label="手机底部导航">
-        <button class="active" type="button" data-mobile-tab="today">▦<span>今天</span></button>
-        <button type="button" data-mobile-tab="diary">▧<span>日记</span></button>
-        <button class="record-tab" type="button" data-mobile-tab="record">🎙<span>录音</span></button>
-        <button type="button" data-mobile-tab="idea">✎<span>灵感</span></button>
-        <button type="button" data-mobile-tab="settings">⚙<span>设置</span></button>
+        <button class="active" type="button" data-mobile-tab="today"><span data-icon="calendar"></span><small>今天</small></button>
+        <button type="button" data-mobile-tab="diary"><span data-icon="book"></span><small>日记</small></button>
+        <button class="record-tab" type="button" data-mobile-record><span data-icon="mic"></span><small>录音</small></button>
+        <button type="button" data-mobile-tab="idea"><span data-icon="pen"></span><small>灵感</small></button>
+        <button type="button" data-mobile-tab="settings"><span data-icon="settings"></span><small>设置</small></button>
       </nav>
+
+      <div class="sheet-backdrop" id="sheetBackdrop" hidden></div>
+      <section class="insert-sheet" id="insertSheet" hidden aria-label="插入块菜单">
+        <div class="sheet-handle"></div>
+        <h2>插入块</h2>
+        <button type="button" data-sheet-insert="date"><span data-icon="calendar"></span><strong>日期</strong><small>插入今天或指定日期</small></button>
+        <button type="button" data-sheet-insert="audio"><span data-icon="mic"></span><strong>录音</strong><small>插入声音片段</small></button>
+        <button type="button" data-sheet-insert="image"><span data-icon="image"></span><strong>图片</strong><small>上传图片</small></button>
+        <button type="button" data-sheet-insert="text"><span data-icon="text"></span><strong>文字</strong><small>普通文本</small></button>
+        <button type="button" data-sheet-insert="divider"><span data-icon="divider"></span><strong>分割线</strong><small>插入分割线</small></button>
+        <button type="button" data-sheet-insert="todo"><span data-icon="check"></span><strong>待办</strong><small>待办事项</small></button>
+        <button type="button" data-sheet-insert="quote"><span data-icon="quote"></span><strong>引用</strong><small>引用一段文字</small></button>
+      </section>
     </div>
 
     <input id="imagePicker" type="file" accept="image/*" hidden />
-    <script src="app.js?v=craft-v2"></script>
+    <input id="coverPicker" type="file" accept="image/*" hidden />
+    <script src="app.js?v=craft-v3"></script>
   </body>
 </html>
