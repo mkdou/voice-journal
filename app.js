@@ -1192,7 +1192,7 @@ function registerServiceWorker() {
     window.location.reload();
   });
 
-  navigator.serviceWorker.register("./sw.js?v=19")
+  navigator.serviceWorker.register("./sw.js?v=20")
     .then((registration) => registration.update())
     .catch(() => {
       el.speechStatus.textContent = "离线缓存暂不可用，其他功能正常";
