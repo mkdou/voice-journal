@@ -460,6 +460,35 @@ button {
   content: "输入文字...";
 }
 
+.todo-block label {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 38px;
+  padding: 8px 0;
+}
+
+.todo-block input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  margin: 7px 0 0;
+  accent-color: var(--green-deep);
+}
+
+.todo-block [data-text-block] {
+  min-height: 34px;
+  outline: 0;
+  color: #2e2d29;
+  font-size: 17px;
+  line-height: 1.9;
+}
+
+.todo-block [data-text-block]:empty::before {
+  content: "待办...";
+  color: #b7b3aa;
+}
+
 .date-block {
   display: inline-flex;
   width: fit-content;
@@ -1077,8 +1106,8 @@ body.editing .mobile-tabbar {
 
   .mobile-page.active {
     display: block !important;
-    height: 100dvh;
-    overflow-y: auto;
+    min-height: 100dvh;
+    overflow: visible;
     -webkit-overflow-scrolling: touch;
   }
 
@@ -1086,10 +1115,11 @@ body.editing .mobile-tabbar {
   .record-dock,
   .mobile-only-panel {
     position: static;
-    height: 100dvh;
-    min-height: calc(100vh - 82px);
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
     border-radius: 0;
-    padding: 14px;
+    padding: 14px 14px 110px;
     border: 0;
     box-shadow: none;
     background: transparent;
@@ -1114,8 +1144,9 @@ body.editing .mobile-tabbar {
   }
 
   .main-stage {
-    height: 100dvh;
+    height: auto;
     min-height: 100vh;
+    overflow: visible;
     padding: 0 18px 92px;
   }
 

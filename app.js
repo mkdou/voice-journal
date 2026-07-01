@@ -540,7 +540,7 @@ function renderBlock(block) {
     return `<section class="block divider-block" data-block="${block.id}"><div class="divider-cards"><span></span><span></span></div>${menu}</section>`;
   }
   if (block.type === "todo") {
-    return `<section class="block todo-block" data-block="${block.id}"><label><input type="checkbox" ${block.checked ? "checked" : ""} data-todo-check="${block.id}" /><span contenteditable="true" data-text-block="${block.id}">${escapeHtml(block.text || "待办事项")}</span></label>${menu}</section>`;
+    return `<section class="block todo-block" data-block="${block.id}"><label><input type="checkbox" ${block.checked ? "checked" : ""} data-todo-check="${block.id}" /><span contenteditable="true" data-text-block="${block.id}">${escapeHtml(block.text || "")}</span></label>${menu}</section>`;
   }
   if (block.type === "quote") {
     return `<section class="block quote-block" data-block="${block.id}"><blockquote contenteditable="true" data-text-block="${block.id}">${escapeHtml(block.text || "引用一段文字")}</blockquote>${menu}</section>`;
@@ -813,12 +813,37 @@ function insertBlock(type, payload = {}) {
   return block;
 }
 
+function insertBlockAfter(blockId, type, payload = {}) {
+  const entry = activeEntry();
+  if (!entry) return null;
+  const block = createBlock(type, payload);
+  const index = entry.blocks.findIndex((item) => item.id === blockId);
+  entry.blocks.splice(index >= 0 ? index + 1 : entry.blocks.length, 0, block);
+  state.activeBlockId = block.id;
+  touchEntry(entry);
+  render();
+  focusBlock(block.id);
+  return block;
+}
+
+function convertBlockToText(blockId) {
+  const entry = activeEntry();
+  const block = entry?.blocks.find((item) => item.id === blockId);
+  if (!entry || !block) return;
+  block.type = "text";
+  block.text = block.text || "";
+  delete block.checked;
+  touchEntry(entry);
+  render();
+  focusBlock(blockId);
+}
+
 function createBlock(type, payload = {}) {
   if (type === "date") return { id: uid("block"), type, date: payload.date || todayISO() };
   if (type === "image") return { id: uid("block"), type, src: payload.src, caption: payload.caption || "" };
   if (type === "audio") return { id: uid("block"), type, status: payload.status || "idle", duration: "00:00", durationMs: 0, transcript: "", transcriptEdited: "", audioDataUrl: "", createdAt: nowISO() };
   if (type === "divider") return { id: uid("block"), type };
-  if (type === "todo") return { id: uid("block"), type, text: payload.text || "待办事项", checked: false };
+  if (type === "todo") return { id: uid("block"), type, text: payload.text || "", checked: false };
   if (type === "quote") return { id: uid("block"), type, text: payload.text || "引用一段文字" };
   return { id: uid("block"), type: "text", text: payload.text || "" };
 }
@@ -1482,6 +1507,24 @@ function bindEvents() {
     if (caption) updateBlock(caption.dataset.caption, { caption: caption.textContent });
   });
 
+  el.blockList.addEventListener("keydown", (event) => {
+    const textBlock = event.target.closest("[data-text-block]");
+    if (!textBlock) return;
+    const blockId = textBlock.dataset.textBlock;
+    const block = activeEntry()?.blocks.find((item) => item.id === blockId);
+    if (!block) return;
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      const nextType = block.type === "todo" ? "todo" : "text";
+      insertBlockAfter(blockId, nextType);
+      return;
+    }
+    if (event.key === "Backspace" && block.type === "todo" && !textBlock.textContent.trim()) {
+      event.preventDefault();
+      convertBlockToText(blockId);
+    }
+  });
+
   el.blockList.addEventListener("click", (event) => {
     const block = event.target.closest("[data-block]");
     if (block) setActiveBlock(block.dataset.block);
@@ -1674,7 +1717,7 @@ async function init() {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("./sw.js?v=29").then((registration) => registration.update()).catch(() => {});
+  navigator.serviceWorker.register("./sw.js?v=30").then((registration) => registration.update()).catch(() => {});
 }
 
 init().catch((error) => {
