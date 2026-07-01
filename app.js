@@ -351,7 +351,6 @@ function renderSegments(entry) {
         <p class="segment-text">${escapeHtml(segmentText(segment))}</p>
         <div class="segment-actions">
           <button type="button" data-append-segment="${segment.id}">追加到正文</button>
-          ${hasAudio ? `<button type="button" data-transcribe-segment="${segment.id}">${segment.transcriptSource === "cloud" ? "重新生成准确转写" : "生成准确转写"}</button>` : ""}
           ${hasAudio ? `<a href="${audioUrl}" download="${escapeHtml(entry.date)}-${index + 1}.webm">下载录音</a>` : ""}
           <button class="danger-action" type="button" data-delete-segment="${segment.id}">删除分段</button>
         </div>
@@ -377,8 +376,7 @@ function escapeHtml(value) {
 }
 
 function segmentText(segment) {
-  if (segment.transcriptionStatus === "running") return "正在生成准确转写...";
-  if (segment.transcriptionStatus === "error") return segment.transcriptionError || "准确转写失败，可稍后重试。";
+  if (segment.transcriptionStatus === "error" && !segment.text) return "这段录音暂时没有转写文字。";
   if (segment.transcriptSource === "cloud" && segment.text) return `准确转写：${segment.text}`;
   return segment.text || "这段录音暂时没有转写文字。";
 }
@@ -1153,16 +1151,6 @@ function bindEvents() {
       return;
     }
 
-    const transcribeButton = event.target.closest("[data-transcribe-segment]");
-    if (transcribeButton) {
-      transcribeButton.disabled = true;
-      transcribeButton.textContent = "转写中...";
-      transcribeSegment(transcribeButton.dataset.transcribeSegment).finally(() => {
-        transcribeButton.disabled = false;
-      });
-      return;
-    }
-
     const button = event.target.closest("[data-append-segment]");
     if (!button) return;
     const entry = activeEntry();
@@ -1204,7 +1192,7 @@ function registerServiceWorker() {
     window.location.reload();
   });
 
-  navigator.serviceWorker.register("./sw.js?v=18")
+  navigator.serviceWorker.register("./sw.js?v=19")
     .then((registration) => registration.update())
     .catch(() => {
       el.speechStatus.textContent = "离线缓存暂不可用，其他功能正常";
