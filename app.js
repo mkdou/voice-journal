@@ -1,5 +1,5 @@
 const DB_NAME = "voice-journal-db";
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 
 const coverPresets = {
   forest: "",
@@ -26,6 +26,7 @@ const state = {
   mobileTab: "today",
   syncEmail: localStorage.getItem("voiceJournalSyncEmail") || "",
   ideas: [],
+  coverImages: [],
   editing: false,
   sheetOpen: false,
   sheetType: "",
@@ -70,6 +71,11 @@ const el = {
   insertSheet: document.querySelector("#insertSheet"),
   coverArea: document.querySelector("#coverArea"),
   coverPicker: document.querySelector("#coverPicker"),
+  coverLibraryPicker: document.querySelector("#coverLibraryPicker"),
+  coverLibraryBtn: document.querySelector("#coverLibraryBtn"),
+  clearCoverLibraryBtn: document.querySelector("#clearCoverLibraryBtn"),
+  coverLibraryList: document.querySelector("#coverLibraryList"),
+  coverLibraryStatus: document.querySelector("#coverLibraryStatus"),
   changeCoverBtn: document.querySelector("#changeCoverBtn"),
   deleteEntryBtn: document.querySelector("#deleteEntryBtn"),
   dateSheet: document.querySelector("#dateSheet"),
@@ -206,6 +212,7 @@ function openDb() {
       if (!db.objectStoreNames.contains("folders")) db.createObjectStore("folders", { keyPath: "id" });
       if (!db.objectStoreNames.contains("audioBlobs")) db.createObjectStore("audioBlobs", { keyPath: "id" });
       if (!db.objectStoreNames.contains("ideas")) db.createObjectStore("ideas", { keyPath: "id" });
+      if (!db.objectStoreNames.contains("coverImages")) db.createObjectStore("coverImages", { keyPath: "id" });
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
@@ -285,11 +292,27 @@ function deleteIdeaRecord(ideaId) {
   });
 }
 
+function putCoverImage(record) {
+  return new Promise((resolve, reject) => {
+    const request = store("coverImages", "readwrite").put(record);
+    request.onsuccess = () => resolve(record);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function deleteCoverImageRecord(coverId) {
+  return new Promise((resolve, reject) => {
+    const request = store("coverImages", "readwrite").delete(coverId);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
 async function seedIfNeeded() {
   const entries = await getAll("entries");
   if (entries.length) return;
   const entry = createEntry();
-  entry.subtitle = "写下今天的感受...";
+  entry.subtitle = "";
   entry.blocks = [
     { id: uid("block"), type: "date", date: todayISO() },
     { id: uid("block"), type: "text", text: "从这里开始记录今天。可以插入文字、图片、日期，也可以把录音放在任意位置。" },
@@ -301,13 +324,14 @@ async function seedIfNeeded() {
 function createEntry(folderId = "daily") {
   const now = nowISO();
   const date = todayISO();
+  const cover = nextCoverFromLibrary();
   return {
     id: uid("entry"),
     title: automaticTitleForDate(date),
     titleEdited: false,
     subtitle: "",
-    coverImage: "",
-    coverPreset: "forest",
+    coverImage: cover.src,
+    coverPreset: cover.preset,
     folderId,
     date,
     blocks: [
@@ -319,9 +343,18 @@ function createEntry(folderId = "daily") {
   };
 }
 
+function nextCoverFromLibrary() {
+  if (!state.coverImages.length) return { src: "", preset: "forest" };
+  const index = Number(localStorage.getItem("voiceJournalCoverRotation") || 0);
+  const image = state.coverImages[index % state.coverImages.length];
+  localStorage.setItem("voiceJournalCoverRotation", String((index + 1) % state.coverImages.length));
+  return { src: image.src, preset: "library" };
+}
+
 async function loadData() {
   state.entries = (await getAll("entries")).map(normalizeEntry).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
   state.ideas = (await getAll("ideas")).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+  state.coverImages = (await getAll("coverImages")).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
   if (!state.activeEntryId) state.activeEntryId = state.entries[0]?.id || null;
   render();
 }
@@ -489,7 +522,9 @@ function renderEditor() {
   el.titleInput.value = displayEntryTitle(entry);
   el.subtitleInput.value = entry.subtitle || "";
   el.subtitleInput.classList.toggle("hidden-subtitle", !entry.subtitle);
-  el.coverArea.style.backgroundImage = coverBackground(entry);
+  const background = coverBackground(entry);
+  document.documentElement.style.setProperty("--journal-bg", background);
+  el.coverArea.style.backgroundImage = background;
   el.blockList.innerHTML = entry.blocks.map(renderBlock).join("");
   attachAudioListeners();
   hydrateIcons(el.blockList);
@@ -501,7 +536,7 @@ function renderBlock(block) {
     return `<section class="block" data-block="${block.id}"><button class="date-block" data-edit-date="${block.id}" type="button">${icon("calendar")} ${escapeHtml(displayDate(block.date))}</button>${menu}</section>`;
   }
   if (block.type === "divider") {
-    return `<section class="block divider-block" data-block="${block.id}"><hr />${menu}</section>`;
+    return `<section class="block divider-block" data-block="${block.id}"><div class="divider-cards"><span></span><span></span></div>${menu}</section>`;
   }
   if (block.type === "todo") {
     return `<section class="block todo-block" data-block="${block.id}"><label><input type="checkbox" ${block.checked ? "checked" : ""} data-todo-check="${block.id}" /><span contenteditable="true" data-text-block="${block.id}">${escapeHtml(block.text || "待办事项")}</span></label>${menu}</section>`;
@@ -641,6 +676,21 @@ function renderSyncState() {
   el.syncStatus.textContent = state.syncEmail
     ? `已保存邮箱：${state.syncEmail}。下一步接入云端同步后，这个邮箱会用于电脑和手机互通。`
     : "未登录。当前数据仍保存在本机。";
+  renderCoverLibrary();
+}
+
+function renderCoverLibrary() {
+  if (!el.coverLibraryStatus || !el.coverLibraryList) return;
+  el.coverLibraryStatus.textContent = state.coverImages.length
+    ? `已保存 ${state.coverImages.length} 张备用封面。新建日记会自动轮换使用。`
+    : "还没有备用封面。";
+  el.coverLibraryList.innerHTML = state.coverImages.map((image) => `
+    <figure>
+      <img src="${image.src}" alt="${escapeHtml(image.name || "备用封面")}" />
+      <button type="button" data-delete-cover-image="${image.id}" aria-label="删除封面图">${icon("close")}</button>
+    </figure>
+  `).join("");
+  hydrateIcons(el.coverLibraryList);
 }
 
 function currentRecordingDuration() {
@@ -1071,6 +1121,38 @@ async function handleCoverFile(file) {
   renderEditor();
 }
 
+async function handleCoverLibraryFiles(files) {
+  const selected = Array.from(files || []).filter((file) => file.type.startsWith("image/"));
+  if (!selected.length) return;
+  const records = [];
+  for (const file of selected) {
+    const src = await blobToDataUrl(file);
+    const record = { id: uid("cover"), src, name: file.name, createdAt: nowISO() };
+    await putCoverImage(record);
+    records.push(record);
+  }
+  state.coverImages.push(...records);
+  state.coverImages.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+  renderCoverLibrary();
+}
+
+async function deleteCoverImage(coverId) {
+  await deleteCoverImageRecord(coverId);
+  state.coverImages = state.coverImages.filter((image) => image.id !== coverId);
+  localStorage.setItem("voiceJournalCoverRotation", "0");
+  renderCoverLibrary();
+}
+
+async function clearCoverLibrary() {
+  if (!state.coverImages.length) return;
+  const confirmed = confirm("清空备用封面库？\n已经用在日记里的封面不会被删除。");
+  if (!confirmed) return;
+  await Promise.all(state.coverImages.map((image) => deleteCoverImageRecord(image.id)));
+  state.coverImages = [];
+  localStorage.setItem("voiceJournalCoverRotation", "0");
+  renderCoverLibrary();
+}
+
 function applyCoverChoice(choice) {
   const entry = activeEntry();
   if (!entry) return;
@@ -1468,6 +1550,16 @@ function bindEvents() {
   });
   el.imagePicker.addEventListener("change", () => handleImageFile(el.imagePicker.files[0]));
   el.coverPicker.addEventListener("change", () => handleCoverFile(el.coverPicker.files[0]));
+  el.coverLibraryPicker?.addEventListener("change", () => {
+    handleCoverLibraryFiles(el.coverLibraryPicker.files);
+    el.coverLibraryPicker.value = "";
+  });
+  el.coverLibraryBtn?.addEventListener("click", () => el.coverLibraryPicker?.click());
+  el.clearCoverLibraryBtn?.addEventListener("click", clearCoverLibrary);
+  el.coverLibraryList?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-delete-cover-image]");
+    if (button) deleteCoverImage(button.dataset.deleteCoverImage);
+  });
   el.changeCoverBtn.addEventListener("click", (event) => {
     event.stopPropagation();
     openCoverSheet();
@@ -1564,7 +1656,7 @@ async function init() {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("./sw.js?v=26").then((registration) => registration.update()).catch(() => {});
+  navigator.serviceWorker.register("./sw.js?v=27").then((registration) => registration.update()).catch(() => {});
 }
 
 init().catch((error) => {

@@ -10,7 +10,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="icon.svg" />
-    <link rel="stylesheet" href="styles.css?v=craft-v6" />
+    <link rel="stylesheet" href="styles.css?v=craft-v7" />
   </head>
   <body>
     <div class="app-shell">
@@ -114,12 +114,22 @@
           </label>
           <button class="panel-action" id="saveEmailBtn" type="button">保存邮箱</button>
           <div class="sync-note" id="syncStatus">未登录。当前数据仍保存在本机。</div>
+          <div class="cover-library">
+            <h3>备用封面库</h3>
+            <p>一次上传多张喜欢的照片。以后新建日记时，会自动轮番挑一张当封面。</p>
+            <div class="cover-library-actions">
+              <button class="panel-action" id="coverLibraryBtn" type="button">上传封面图</button>
+              <button class="panel-action subtle-action" id="clearCoverLibraryBtn" type="button">清空图库</button>
+            </div>
+            <div class="sync-note" id="coverLibraryStatus">还没有备用封面。</div>
+            <div class="cover-library-list" id="coverLibraryList"></div>
+          </div>
         </div>
       </section>
 
       <nav class="mobile-tabbar" aria-label="手机底部导航">
         <button class="active" type="button" data-mobile-tab="today"><span data-icon="calendar"></span><small>今天</small></button>
-        <button type="button" data-mobile-tab="diary"><span data-icon="book"></span><small>日记</small></button>
+        <button type="button" data-mobile-tab="diary"><span class="tab-emoji" aria-hidden="true">📔</span><small>日记</small></button>
         <button class="record-tab" type="button" data-mobile-record><span data-icon="mic"></span><small>录音</small></button>
         <button type="button" data-mobile-tab="settings"><span data-icon="settings"></span><small>设置</small></button>
       </nav>
@@ -166,6 +176,7 @@
 
     <input id="imagePicker" type="file" accept="image/*" hidden />
     <input id="coverPicker" type="file" accept="image/*" hidden />
-    <script src="app.js?v=craft-v6"></script>
+    <input id="coverLibraryPicker" type="file" accept="image/*" multiple hidden />
+    <script src="app.js?v=craft-v7"></script>
   </body>
 </html>
