@@ -14,6 +14,8 @@ const state = {
   entries: [],
   activeEntryId: null,
   activeFolderId: "all",
+  mobileTab: "today",
+  syncEmail: localStorage.getItem("voiceJournalSyncEmail") || "",
   search: "",
   activeBlockId: null,
   recorder: null,
@@ -44,7 +46,10 @@ const el = {
   audioCount: document.querySelector("#audioCount"),
   insertDateTopBtn: document.querySelector("#insertDateTopBtn"),
   closeHintBtn: document.querySelector("#closeHintBtn"),
-  closeDockBtn: document.querySelector("#closeDockBtn")
+  closeDockBtn: document.querySelector("#closeDockBtn"),
+  syncEmailInput: document.querySelector("#syncEmailInput"),
+  saveEmailBtn: document.querySelector("#saveEmailBtn"),
+  syncStatus: document.querySelector("#syncStatus")
 };
 
 function uid(prefix) {
@@ -213,6 +218,8 @@ function render() {
   renderEntries();
   renderEditor();
   renderAudioDock();
+  renderMobileView();
+  renderSyncState();
 }
 
 function renderFolders() {
@@ -309,6 +316,23 @@ function renderAudioDock() {
       <time>${escapeHtml(block.duration || "00:00")}</time>
     </div>
   `).join("");
+}
+
+function renderMobileView() {
+  document.querySelectorAll("[data-mobile-page]").forEach((page) => {
+    page.classList.toggle("active", page.dataset.mobilePage === state.mobileTab);
+  });
+  document.querySelectorAll("[data-mobile-tab]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.mobileTab === state.mobileTab);
+  });
+}
+
+function renderSyncState() {
+  if (!el.syncEmailInput || !el.syncStatus) return;
+  el.syncEmailInput.value = state.syncEmail;
+  el.syncStatus.textContent = state.syncEmail
+    ? `已保存邮箱：${state.syncEmail}。下一步接入云端同步后，这个邮箱会用于电脑和手机互通。`
+    : "未登录。当前数据仍保存在本机。";
 }
 
 function currentRecordingDuration() {
@@ -532,6 +556,7 @@ function bindEvents() {
     state.entries.unshift(entry);
     state.activeEntryId = entry.id;
     await putEntry(entry);
+    state.mobileTab = "today";
     render();
     el.titleInput.focus();
   });
@@ -552,6 +577,7 @@ function bindEvents() {
     const button = event.target.closest("[data-entry]");
     if (!button) return;
     state.activeEntryId = button.dataset.entry;
+    state.mobileTab = "today";
     render();
   });
 
@@ -605,10 +631,32 @@ function bindEvents() {
   });
 
   el.insertDateTopBtn.addEventListener("click", () => insertBlock("date"));
+  document.querySelectorAll("[data-mobile-tab]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.mobileTab = button.dataset.mobileTab;
+      renderMobileView();
+    });
+  });
+  document.querySelectorAll("[data-insert-mobile]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.mobileTab = "today";
+      insertBlock(button.dataset.insertMobile, { text: "新的灵感：" });
+      render();
+    });
+  });
   el.imagePicker.addEventListener("change", () => handleImageFile(el.imagePicker.files[0]));
   el.recordBtn.addEventListener("click", () => toggleRecording().catch(() => {
     el.speechStatus.textContent = "无法访问麦克风，请检查权限";
   }));
+  el.saveEmailBtn?.addEventListener("click", () => {
+    state.syncEmail = el.syncEmailInput.value.trim();
+    if (state.syncEmail) {
+      localStorage.setItem("voiceJournalSyncEmail", state.syncEmail);
+    } else {
+      localStorage.removeItem("voiceJournalSyncEmail");
+    }
+    renderSyncState();
+  });
   el.closeHintBtn?.addEventListener("click", () => el.closeHintBtn.closest(".hint-card").hidden = true);
   el.closeDockBtn?.addEventListener("click", () => document.querySelector(".record-dock").hidden = true);
 
@@ -633,7 +681,7 @@ async function init() {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("./sw.js?v=21").then((registration) => registration.update()).catch(() => {});
+  navigator.serviceWorker.register("./sw.js?v=22").then((registration) => registration.update()).catch(() => {});
 }
 
 init().catch((error) => {

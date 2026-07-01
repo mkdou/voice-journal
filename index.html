@@ -10,18 +10,11 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="icon.svg" />
-    <link rel="stylesheet" href="styles.css?v=craft-v1" />
+    <link rel="stylesheet" href="styles.css?v=craft-v2" />
   </head>
   <body>
     <div class="app-shell">
-      <aside class="guide-rail" aria-label="设计说明">
-        <div class="guide-item"><b>1</b><span>顶部工具栏<br />简洁操作，不打扰写作</span></div>
-        <div class="guide-item"><b>2</b><span>日记导航<br />按日期和主题回看</span></div>
-        <div class="guide-item"><b>3</b><span>内容编辑区<br />文字、图片和声音混排</span></div>
-        <div class="guide-item"><b>4</b><span>录音工作台<br />插入声音片段块</span></div>
-      </aside>
-
-      <aside class="sidebar">
+      <aside class="sidebar mobile-page" data-mobile-page="diary">
         <div class="window-dots" aria-hidden="true"><span></span><span></span><span></span></div>
         <div class="brand-row">
           <div class="brand-mark">VJ</div>
@@ -51,7 +44,7 @@
         </div>
       </aside>
 
-      <main class="main-stage">
+      <main class="main-stage mobile-page active" data-mobile-page="today">
         <div class="cover">
           <div class="cover-actions">
             <button type="button">分享</button>
@@ -79,7 +72,7 @@
         </div>
       </main>
 
-      <aside class="record-dock">
+      <aside class="record-dock mobile-page" data-mobile-page="record">
         <div class="dock-tabs">
           <button class="active" type="button">录音</button>
           <button type="button">块导航</button>
@@ -109,9 +102,38 @@
           <div class="audio-mini-list" id="audioMiniList"></div>
         </section>
       </aside>
+
+      <section class="mobile-only-panel mobile-page" data-mobile-page="idea">
+        <div class="mobile-panel-card">
+          <h2>灵感</h2>
+          <p>快速收集还没有整理成日记的想法。第一版先作为入口保留，后面可以接模板和灵感箱。</p>
+          <button class="panel-action" type="button" data-insert-mobile="text">＋ 写一条灵感</button>
+        </div>
+      </section>
+
+      <section class="mobile-only-panel mobile-page" data-mobile-page="settings">
+        <div class="mobile-panel-card">
+          <h2>设置</h2>
+          <p>本机内容会自动保存。跨手机和电脑同步需要登录邮箱并接入云端同步服务。</p>
+          <label class="email-login">
+            <span>邮箱</span>
+            <input id="syncEmailInput" type="email" placeholder="name@example.com" autocomplete="email" />
+          </label>
+          <button class="panel-action" id="saveEmailBtn" type="button">保存邮箱</button>
+          <div class="sync-note" id="syncStatus">未登录。当前数据仍保存在本机。</div>
+        </div>
+      </section>
+
+      <nav class="mobile-tabbar" aria-label="手机底部导航">
+        <button class="active" type="button" data-mobile-tab="today">▦<span>今天</span></button>
+        <button type="button" data-mobile-tab="diary">▧<span>日记</span></button>
+        <button class="record-tab" type="button" data-mobile-tab="record">🎙<span>录音</span></button>
+        <button type="button" data-mobile-tab="idea">✎<span>灵感</span></button>
+        <button type="button" data-mobile-tab="settings">⚙<span>设置</span></button>
+      </nav>
     </div>
 
     <input id="imagePicker" type="file" accept="image/*" hidden />
-    <script src="app.js?v=craft-v1"></script>
+    <script src="app.js?v=craft-v2"></script>
   </body>
 </html>
