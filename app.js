@@ -904,6 +904,27 @@ async function deleteBlock(blockId) {
   queueSave();
 }
 
+function deleteBlockFromKeyboard(blockId) {
+  const entry = activeEntry();
+  if (!entry || entry.blocks.length <= 1) return false;
+  const index = entry.blocks.findIndex((item) => item.id === blockId);
+  if (index < 0) return false;
+  const block = entry.blocks[index];
+  if (block.type === "audio" && block.audioId) {
+    deleteAudioRecord(block.audioId).catch(() => {});
+  }
+  entry.blocks.splice(index, 1);
+  const focusTarget = entry.blocks[Math.max(0, index - 1)] || entry.blocks[0];
+  state.activeBlockId = focusTarget?.id || null;
+  touchEntry(entry);
+  render();
+  if (focusTarget?.type === "text" || focusTarget?.type === "todo" || focusTarget?.type === "quote") {
+    focusBlock(focusTarget.id);
+  }
+  queueSave();
+  return true;
+}
+
 async function deleteEntry(entryId) {
   const entry = state.entries.find((item) => item.id === entryId);
   if (!entry) return;
@@ -1519,9 +1540,14 @@ function bindEvents() {
       insertBlockAfter(blockId, nextType);
       return;
     }
-    if (event.key === "Backspace" && block.type === "todo" && !textBlock.textContent.trim()) {
+    if (event.key === "Backspace" && !textBlock.textContent.trim() && block.type === "todo") {
       event.preventDefault();
       convertBlockToText(blockId);
+      return;
+    }
+    if (event.key === "Backspace" && !textBlock.textContent.trim()) {
+      event.preventDefault();
+      deleteBlockFromKeyboard(blockId);
     }
   });
 
@@ -1717,7 +1743,7 @@ async function init() {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("./sw.js?v=30").then((registration) => registration.update()).catch(() => {});
+  navigator.serviceWorker.register("./sw.js?v=31").then((registration) => registration.update()).catch(() => {});
 }
 
 init().catch((error) => {

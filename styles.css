@@ -462,26 +462,26 @@ button {
 
 .todo-block label {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
+  grid-template-columns: 20px minmax(0, 1fr);
   align-items: flex-start;
-  gap: 12px;
-  min-height: 38px;
-  padding: 8px 0;
+  gap: 8px;
+  min-height: 28px;
+  padding: 2px 0;
 }
 
 .todo-block input[type="checkbox"] {
-  width: 20px;
-  height: 20px;
-  margin: 7px 0 0;
+  width: 18px;
+  height: 18px;
+  margin: 6px 0 0;
   accent-color: var(--green-deep);
 }
 
 .todo-block [data-text-block] {
-  min-height: 34px;
+  min-height: 28px;
   outline: 0;
   color: #2e2d29;
   font-size: 17px;
-  line-height: 1.9;
+  line-height: 1.65;
 }
 
 .todo-block [data-text-block]:empty::before {
@@ -758,12 +758,6 @@ button {
 
 .editor-toolbar {
   transition: transform 0.18s ease, opacity 0.18s ease;
-}
-
-body.editing .mobile-tabbar {
-  transform: translateY(140%);
-  opacity: 0;
-  pointer-events: none;
 }
 
 .floating-toolbar button {
