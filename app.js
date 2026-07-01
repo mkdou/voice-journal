@@ -1,5 +1,14 @@
 const DB_NAME = "voice-journal-db";
-const DB_VERSION = 3;
+const DB_VERSION = 4;
+
+const coverPresets = {
+  forest: "",
+  ocean: "linear-gradient(135deg, #d9f0ec 0%, #92c9c4 48%, #f8f4df 100%)",
+  star: "linear-gradient(135deg, #283142 0%, #58728a 54%, #d5d8c2 100%)",
+  mountain: "linear-gradient(135deg, #e6eee8 0%, #adc3ad 48%, #6f8b73 100%)",
+  city: "linear-gradient(135deg, #e8f1ef 0%, #b7d5cb 45%, #f3d6c6 100%)",
+  gradient: "linear-gradient(135deg, #e7f4ed 0%, #9fdbbe 52%, #fffdf8 100%)"
+};
 
 const folders = [
   { id: "all", name: "全部日记", icon: "calendar" },
@@ -16,8 +25,10 @@ const state = {
   activeFolderId: "all",
   mobileTab: "today",
   syncEmail: localStorage.getItem("voiceJournalSyncEmail") || "",
+  ideas: [],
   editing: false,
   sheetOpen: false,
+  sheetType: "",
   search: "",
   activeBlockId: null,
   recorder: null,
@@ -26,9 +37,11 @@ const state = {
   recordingBlockId: null,
   playingBlockId: null,
   elapsedBeforePause: 0,
-  playbackTimers: new Map(),
+  audioUrls: new Map(),
   chunks: [],
+  recordingMimeType: "",
   liveTranscript: "",
+  dateEditingBlockId: null,
   recordingStartedAt: 0,
   timerId: null,
   saveTimer: null
@@ -58,7 +71,13 @@ const el = {
   coverArea: document.querySelector("#coverArea"),
   coverPicker: document.querySelector("#coverPicker"),
   changeCoverBtn: document.querySelector("#changeCoverBtn"),
-  resetCoverBtn: document.querySelector("#resetCoverBtn"),
+  deleteEntryBtn: document.querySelector("#deleteEntryBtn"),
+  dateSheet: document.querySelector("#dateSheet"),
+  datePickerInput: document.querySelector("#datePickerInput"),
+  coverSheet: document.querySelector("#coverSheet"),
+  ideaInput: document.querySelector("#ideaInput"),
+  addIdeaBtn: document.querySelector("#addIdeaBtn"),
+  ideaList: document.querySelector("#ideaList"),
   syncEmailInput: document.querySelector("#syncEmailInput"),
   saveEmailBtn: document.querySelector("#saveEmailBtn"),
   syncStatus: document.querySelector("#syncStatus")
@@ -103,7 +122,20 @@ function nowISO() {
 }
 
 function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+  return localDateISO(new Date());
+}
+
+function localDateISO(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function dateOffsetISO(days) {
+  const date = new Date(`${todayISO()}T00:00:00`);
+  date.setDate(date.getDate() + days);
+  return localDateISO(date);
 }
 
 function displayDate(dateText = todayISO()) {
@@ -113,7 +145,22 @@ function displayDate(dateText = todayISO()) {
   const diff = Math.round((new Date(todayISO()) - date) / 86400000);
   if (diff === 0) return "今天";
   if (diff === 1) return "昨天";
+  if (diff === 2) return "前天";
   return `${monthDay} ${weekday}`;
+}
+
+function automaticTitleForDate(dateText = todayISO(), existingEntries = state.entries) {
+  const diff = Math.round((new Date(todayISO()) - new Date(`${dateText}T00:00:00`)) / 86400000);
+  let base = "";
+  if (diff === 0) base = "今天的说一说";
+  else if (diff === 1) base = "昨天的想一想";
+  else if (diff === 2) base = "前天的碎碎念";
+  else {
+    const monthDay = new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric" }).format(new Date(`${dateText}T00:00:00`));
+    base = `${monthDay}的碎碎念`;
+  }
+  const sameDay = existingEntries.filter((entry) => entry.date === dateText && (entry.title || "").startsWith(base)).length;
+  return sameDay ? `${base} ${sameDay + 1}` : base;
 }
 
 function formatTime(value) {
@@ -143,6 +190,8 @@ function openDb() {
       const db = request.result;
       if (!db.objectStoreNames.contains("entries")) db.createObjectStore("entries", { keyPath: "id" });
       if (!db.objectStoreNames.contains("folders")) db.createObjectStore("folders", { keyPath: "id" });
+      if (!db.objectStoreNames.contains("audioBlobs")) db.createObjectStore("audioBlobs", { keyPath: "id" });
+      if (!db.objectStoreNames.contains("ideas")) db.createObjectStore("ideas", { keyPath: "id" });
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
@@ -169,11 +218,63 @@ function putEntry(entry) {
   });
 }
 
+function deleteEntryRecord(entryId) {
+  return new Promise((resolve, reject) => {
+    const request = store("entries", "readwrite").delete(entryId);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function putAudioRecord(record) {
+  return new Promise((resolve, reject) => {
+    const request = store("audioBlobs", "readwrite").put(record);
+    request.onsuccess = () => resolve(record);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function getAudioRecord(audioId) {
+  return new Promise((resolve, reject) => {
+    const request = store("audioBlobs").get(audioId);
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function deleteAudioRecord(audioId) {
+  if (!audioId) return Promise.resolve();
+  if (state.audioUrls.has(audioId)) {
+    URL.revokeObjectURL(state.audioUrls.get(audioId));
+    state.audioUrls.delete(audioId);
+  }
+  return new Promise((resolve, reject) => {
+    const request = store("audioBlobs", "readwrite").delete(audioId);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function putIdea(idea) {
+  return new Promise((resolve, reject) => {
+    const request = store("ideas", "readwrite").put(idea);
+    request.onsuccess = () => resolve(idea);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function deleteIdeaRecord(ideaId) {
+  return new Promise((resolve, reject) => {
+    const request = store("ideas", "readwrite").delete(ideaId);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
 async function seedIfNeeded() {
   const entries = await getAll("entries");
   if (entries.length) return;
   const entry = createEntry();
-  entry.title = `${new Date().getMonth() + 1}月${new Date().getDate()}日 · 碎碎念`;
   entry.subtitle = "写下今天的感受...";
   entry.blocks = [
     { id: uid("block"), type: "date", date: todayISO() },
@@ -185,15 +286,18 @@ async function seedIfNeeded() {
 
 function createEntry(folderId = "daily") {
   const now = nowISO();
+  const date = todayISO();
   return {
     id: uid("entry"),
-    title: "未命名日记",
+    title: automaticTitleForDate(date),
+    titleEdited: false,
     subtitle: "",
     coverImage: "",
+    coverPreset: "forest",
     folderId,
-    date: todayISO(),
+    date,
     blocks: [
-      { id: uid("block"), type: "date", date: todayISO() },
+      { id: uid("block"), type: "date", date },
       { id: uid("block"), type: "text", text: "" }
     ],
     createdAt: now,
@@ -203,20 +307,33 @@ function createEntry(folderId = "daily") {
 
 async function loadData() {
   state.entries = (await getAll("entries")).map(normalizeEntry).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+  state.ideas = (await getAll("ideas")).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
   if (!state.activeEntryId) state.activeEntryId = state.entries[0]?.id || null;
   render();
 }
 
 function normalizeEntry(entry) {
   if (Array.isArray(entry.blocks)) {
+    const titleEdited = Boolean(entry.titleEdited);
+    const normalizedDate = entry.date || entry.blocks.find((block) => block.type === "date")?.date || todayISO();
+    const title = (!titleEdited && (!entry.title || entry.title === "未命名日记"))
+      ? automaticTitleForDate(normalizedDate, state.entries.filter((item) => item.id !== entry.id))
+      : entry.title;
     return {
       ...entry,
+      title,
+      titleEdited,
+      date: normalizedDate,
       subtitle: entry.subtitle || "",
       coverImage: entry.coverImage || "",
+      coverPreset: entry.coverPreset || "forest",
       blocks: entry.blocks.map((block) => {
         if (block.type !== "audio") return block;
         return {
           audioDataUrl: "",
+          audioId: "",
+          mimeType: "",
+          blobSize: 0,
           duration: "00:00",
           durationMs: 0,
           transcript: "",
@@ -247,10 +364,16 @@ function normalizeEntry(entry) {
     });
   });
   if (blocks.length < 2) blocks.push({ id: uid("block"), type: "text", text: "" });
+  const normalizedDate = entry.date || todayISO();
+  const titleEdited = Boolean(entry.titleEdited);
   return {
     ...entry,
+    title: (!titleEdited && (!entry.title || entry.title === "未命名日记")) ? automaticTitleForDate(normalizedDate) : entry.title,
+    titleEdited,
     subtitle: entry.subtitle || "",
     coverImage: entry.coverImage || "",
+    coverPreset: entry.coverPreset || "forest",
+    date: normalizedDate,
     blocks
   };
 }
@@ -288,6 +411,7 @@ function render() {
   renderEntries();
   renderEditor();
   renderAudioDock();
+  renderIdeas();
   renderMobileView();
   renderSyncState();
 }
@@ -314,11 +438,14 @@ function renderEntries() {
     return;
   }
   el.entryList.innerHTML = entries.map((entry) => `
-    <button class="entry-button ${entry.id === state.activeEntryId ? "active" : ""}" data-entry="${entry.id}" type="button">
-      <span>${escapeHtml(entry.title || "未命名日记")}</span>
-      <time>${relativeDay(entry.date || entry.createdAt)}</time>
-      <small>${escapeHtml(entry.subtitle || previewEntry(entry))}</small>
-    </button>
+    <div class="entry-row ${entry.id === state.activeEntryId ? "active" : ""}">
+      <button class="entry-button" data-entry="${entry.id}" type="button">
+        <span>${escapeHtml(entry.title || "未命名日记")}</span>
+        <time>${relativeDay(entry.date || entry.createdAt)}</time>
+        <small>${entryStats(entry)} · ${escapeHtml(entry.subtitle || previewEntry(entry))}</small>
+      </button>
+      <button class="entry-delete" data-delete-entry="${entry.id}" type="button">删除</button>
+    </div>
   `).join("");
 }
 
@@ -326,14 +453,28 @@ function previewEntry(entry) {
   return entry.blocks.map(blockText).join(" ").replace(/\s+/g, " ").trim().slice(0, 32) || "还没有内容";
 }
 
+function entryStats(entry) {
+  const audio = entry.blocks.filter((block) => block.type === "audio").length;
+  const images = entry.blocks.filter((block) => block.type === "image").length;
+  const parts = [];
+  if (audio) parts.push(`${audio}段录音`);
+  if (images) parts.push(`${images}张图片`);
+  return parts.join(" · ") || displayDate(entry.date);
+}
+
+function coverBackground(entry) {
+  if (entry.coverImage) {
+    return `linear-gradient(180deg, rgba(22, 42, 30, 0.16), rgba(22, 42, 30, 0.26)), url("${entry.coverImage}")`;
+  }
+  return coverPresets[entry.coverPreset || "forest"] || "";
+}
+
 function renderEditor() {
   const entry = activeEntry();
   if (!entry) return;
   el.titleInput.value = entry.title || "";
   el.subtitleInput.value = entry.subtitle || "";
-  el.coverArea.style.backgroundImage = entry.coverImage
-    ? `linear-gradient(180deg, rgba(22, 42, 30, 0.16), rgba(22, 42, 30, 0.26)), url("${entry.coverImage}")`
-    : "";
+  el.coverArea.style.backgroundImage = coverBackground(entry);
   el.blockList.innerHTML = entry.blocks.map(renderBlock).join("");
   attachAudioListeners();
   hydrateIcons(el.blockList);
@@ -420,7 +561,7 @@ function renderAudioBlock(block, menu) {
         <button type="button" data-organize-transcript="${block.id}">整理成日记</button>
         <button type="button" class="more-button" aria-label="更多">${icon("more")}</button>
       </div>
-      ${block.audioDataUrl ? `<audio class="sr-audio" preload="metadata" data-audio="${block.id}" src="${block.audioDataUrl}"></audio>` : ""}
+      ${block.audioId || block.audioDataUrl ? `<audio class="sr-audio" preload="metadata" data-audio="${block.id}" data-audio-id="${escapeHtml(block.audioId || "")}" src="${block.audioDataUrl || ""}"></audio>` : `<div class="playback-error">这段录音没有可播放文件。</div>`}
       ${menu}
     </section>
   `;
@@ -455,6 +596,21 @@ function renderAudioDock() {
     </div>
   `).join("");
   hydrateIcons(el.audioMiniList);
+}
+
+function renderIdeas() {
+  if (!el.ideaList) return;
+  if (!state.ideas.length) {
+    el.ideaList.innerHTML = `<div class="empty-state">还没有灵感。想到一句话就先丢在这里。</div>`;
+    return;
+  }
+  el.ideaList.innerHTML = state.ideas.map((idea) => `
+    <article class="idea-item">
+      <p>${escapeHtml(idea.content || "空灵感")}</p>
+      <time>${formatTime(idea.createdAt)}</time>
+      <button type="button" data-delete-idea="${idea.id}">删除</button>
+    </article>
+  `).join("");
 }
 
 function renderMobileView() {
@@ -495,6 +651,12 @@ function attachAudioListeners() {
     const blockId = audio.dataset.audio;
     const progress = el.blockList.querySelector(`[data-progress="${blockId}"]`);
     const current = el.blockList.querySelector(`[data-current-time="${blockId}"]`);
+    const block = activeEntry()?.blocks.find((item) => item.id === blockId);
+    audio.muted = false;
+    audio.volume = 1;
+    if (!audio.src && block?.audioId) {
+      hydrateAudioSource(audio, block).catch(() => showPlaybackError(blockId, "录音文件读取失败，请重新录一段。"));
+    }
     audio.addEventListener("loadedmetadata", () => {
       if (progress && Number.isFinite(audio.duration)) progress.max = Math.max(1, Math.round(audio.duration));
     });
@@ -507,6 +669,31 @@ function attachAudioListeners() {
       setAudioButtonState(blockId, false);
     });
   });
+}
+
+async function hydrateAudioSource(audio, block) {
+  if (!block.audioId) return;
+  if (state.audioUrls.has(block.audioId)) {
+    audio.src = state.audioUrls.get(block.audioId);
+    return;
+  }
+  const record = await getAudioRecord(block.audioId);
+  if (!record?.blob) return;
+  const url = URL.createObjectURL(record.blob);
+  state.audioUrls.set(block.audioId, url);
+  audio.src = url;
+}
+
+function showPlaybackError(blockId, message) {
+  const blockEl = el.blockList.querySelector(`[data-block="${blockId}"]`);
+  if (!blockEl) return;
+  let node = blockEl.querySelector(".playback-error");
+  if (!node) {
+    node = document.createElement("div");
+    node.className = "playback-error";
+    blockEl.querySelector(".custom-player")?.after(node);
+  }
+  node.textContent = message;
 }
 
 function setActiveBlock(blockId) {
@@ -564,15 +751,53 @@ function updateBlock(blockId, patch) {
   queueSave();
 }
 
-function deleteBlock(blockId) {
+function maybeHandleDividerShortcut(blockId, text) {
+  if (text.trim() !== "===") return false;
+  const entry = activeEntry();
+  const index = entry?.blocks.findIndex((block) => block.id === blockId);
+  if (!entry || index < 0) return false;
+  entry.blocks[index] = { id: blockId, type: "divider" };
+  const next = createBlock("text", { text: "" });
+  entry.blocks.splice(index + 1, 0, next);
+  state.activeBlockId = next.id;
+  touchEntry(entry);
+  render();
+  focusBlock(next.id);
+  return true;
+}
+
+async function deleteBlock(blockId) {
   const entry = activeEntry();
   if (!entry) return;
   if (entry.blocks.length <= 1) return;
+  const block = entry.blocks.find((item) => item.id === blockId);
+  if (block?.type === "audio") await deleteAudioRecord(block.audioId);
   entry.blocks = entry.blocks.filter((block) => block.id !== blockId);
   if (state.activeBlockId === blockId) state.activeBlockId = entry.blocks[0]?.id || null;
   touchEntry(entry);
   render();
   queueSave();
+}
+
+async function deleteEntry(entryId) {
+  const entry = state.entries.find((item) => item.id === entryId);
+  if (!entry) return;
+  const confirmed = confirm("删除这篇日记？\n删除后无法恢复。");
+  if (!confirmed) return;
+  await Promise.all(entry.blocks.filter((block) => block.type === "audio").map((block) => deleteAudioRecord(block.audioId)));
+  await deleteEntryRecord(entryId);
+  state.entries = state.entries.filter((item) => item.id !== entryId);
+  if (state.activeEntryId === entryId) {
+    state.activeEntryId = state.entries[0]?.id || null;
+    state.mobileTab = "diary";
+  }
+  if (!state.entries.length) {
+    const fresh = createEntry();
+    state.entries.unshift(fresh);
+    state.activeEntryId = fresh.id;
+    await putEntry(fresh);
+  }
+  render();
 }
 
 function touchEntry(entry) {
@@ -651,6 +876,7 @@ async function startRecording(blockId = null) {
     throw error;
   }
   const mimeType = pickMimeType();
+  state.recordingMimeType = mimeType;
   state.recorder = new MediaRecorder(state.mediaStream, mimeType ? { mimeType } : undefined);
   state.recorder.ondataavailable = (event) => {
     if (event.data?.size) state.chunks.push(event.data);
@@ -714,8 +940,12 @@ async function finishRecording() {
   if (state.recordingStartedAt) {
     state.elapsedBeforePause += Date.now() - state.recordingStartedAt;
   }
-  state.mediaStream?.getTracks().forEach((track) => track.stop());
   if (state.recorder?.state === "recording" || state.recorder?.state === "paused") {
+    try {
+      state.recorder.requestData();
+    } catch {
+      // Some browsers do not allow manual data requests in every state.
+    }
     state.recorder.stop();
     return;
   }
@@ -724,33 +954,54 @@ async function finishRecording() {
 async function finalizeRecording() {
   const durationMs = state.elapsedBeforePause;
   const duration = formatDuration(durationMs);
-  const mimeType = state.chunks[0]?.type || "audio/webm";
+  const mimeType = state.recordingMimeType || state.chunks[0]?.type || "audio/mp4";
   const blob = new Blob(state.chunks, { type: mimeType });
-  const audioDataUrl = blob.size ? await blobToDataUrl(blob) : "";
+  if (!blob.size || blob.size < 128) {
+    updateBlock(state.recordingBlockId, {
+      duration,
+      durationMs,
+      transcript: state.liveTranscript || "",
+      status: "idle"
+    });
+    cleanupRecordingState("录音文件为空，请重新录一次");
+    render();
+    return;
+  }
+  const audioId = uid("audio");
+  await putAudioRecord({ id: audioId, blob, mimeType, size: blob.size, createdAt: nowISO() });
   updateBlock(state.recordingBlockId, {
-    audioDataUrl,
+    audioId,
+    audioDataUrl: "",
+    mimeType,
+    blobSize: blob.size,
     duration,
     durationMs,
     transcript: state.liveTranscript || "",
     createdAt: nowISO(),
     status: "done"
   });
-  state.recorder = null;
-  state.mediaStream = null;
-  state.recordingBlockId = null;
-  state.chunks = [];
-  state.recordingStartedAt = 0;
-  state.elapsedBeforePause = 0;
-  el.recordBtn.classList.remove("recording");
-  el.recordBtn.innerHTML = `${icon("mic")} 开始说话`;
-  el.speechStatus.textContent = "准备就绪";
+  cleanupRecordingState("准备就绪");
   el.liveTranscript.textContent = state.liveTranscript || "录音已保存。";
   render();
   await saveActiveEntry();
 }
 
+function cleanupRecordingState(statusText = "准备就绪") {
+  state.mediaStream?.getTracks().forEach((track) => track.stop());
+  state.recorder = null;
+  state.mediaStream = null;
+  state.recordingBlockId = null;
+  state.chunks = [];
+  state.recordingMimeType = "";
+  state.recordingStartedAt = 0;
+  state.elapsedBeforePause = 0;
+  el.recordBtn.classList.remove("recording");
+  el.recordBtn.innerHTML = `${icon("mic")} 开始说话`;
+  el.speechStatus.textContent = statusText;
+}
+
 function pickMimeType() {
-  const types = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
+  const types = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"];
   return types.find((type) => MediaRecorder.isTypeSupported(type)) || "";
 }
 
@@ -774,8 +1025,48 @@ async function handleCoverFile(file) {
   const entry = activeEntry();
   if (!entry) return;
   entry.coverImage = await blobToDataUrl(file);
+  entry.coverPreset = "custom";
   touchEntry(entry);
   renderEditor();
+}
+
+function applyCoverChoice(choice) {
+  const entry = activeEntry();
+  if (!entry) return;
+  if (choice === "upload") {
+    el.coverPicker.click();
+    closeInsertSheet();
+    return;
+  }
+  if (choice === "delete" || choice === "forest") {
+    entry.coverImage = "";
+    entry.coverPreset = "forest";
+  } else {
+    entry.coverImage = "";
+    entry.coverPreset = choice;
+  }
+  touchEntry(entry);
+  renderEditor();
+  closeInsertSheet();
+}
+
+async function addIdea(content) {
+  const text = content.trim();
+  if (!text) return;
+  const now = nowISO();
+  const idea = { id: uid("idea"), type: "text", content: text, createdAt: now, updatedAt: now };
+  state.ideas.unshift(idea);
+  await putIdea(idea);
+  el.ideaInput.value = "";
+  renderIdeas();
+}
+
+async function deleteIdea(ideaId) {
+  const confirmed = confirm("删除这条灵感？");
+  if (!confirmed) return;
+  await deleteIdeaRecord(ideaId);
+  state.ideas = state.ideas.filter((idea) => idea.id !== ideaId);
+  renderIdeas();
 }
 
 function enterEditing() {
@@ -799,14 +1090,36 @@ function updateKeyboardOffset() {
 
 function openInsertSheet() {
   state.sheetOpen = true;
+  state.sheetType = "insert";
   el.sheetBackdrop.hidden = false;
   el.insertSheet.hidden = false;
+  el.dateSheet.hidden = true;
+  el.coverSheet.hidden = true;
 }
 
 function closeInsertSheet() {
   state.sheetOpen = false;
+  state.sheetType = "";
   el.sheetBackdrop.hidden = true;
   el.insertSheet.hidden = true;
+  el.dateSheet.hidden = true;
+  el.coverSheet.hidden = true;
+}
+
+function openDateSheet(blockId = null) {
+  state.sheetOpen = true;
+  state.sheetType = "date";
+  state.dateEditingBlockId = blockId;
+  el.sheetBackdrop.hidden = false;
+  el.dateSheet.hidden = false;
+  el.datePickerInput.value = activeEntry()?.blocks.find((block) => block.id === blockId)?.date || todayISO();
+}
+
+function openCoverSheet() {
+  state.sheetOpen = true;
+  state.sheetType = "cover";
+  el.sheetBackdrop.hidden = false;
+  el.coverSheet.hidden = false;
 }
 
 function handleInsert(type, options = {}) {
@@ -839,18 +1152,29 @@ function handleSheetInsert(type) {
 }
 
 function editDateBlock(blockId) {
+  openDateSheet(blockId);
+}
+
+function setDateBlock(dateValue) {
+  const blockId = state.dateEditingBlockId;
+  if (!blockId) return;
   const entry = activeEntry();
-  const block = entry?.blocks.find((item) => item.id === blockId);
-  if (!block) return;
-  const value = prompt("修改日期，格式 YYYY-MM-DD", block.date || todayISO());
-  if (!value) return;
-  updateBlock(blockId, { date: value.trim() });
+  updateBlock(blockId, { date: dateValue });
+  if (entry?.blocks[0]?.id === blockId) {
+    entry.date = dateValue;
+    if (!entry.titleEdited) entry.title = automaticTitleForDate(dateValue, state.entries.filter((item) => item.id !== entry.id));
+    touchEntry(entry);
+  }
   render();
 }
 
 async function toggleAudioPlayback(blockId) {
   const audio = el.blockList.querySelector(`[data-audio="${blockId}"]`);
   if (!audio) return;
+  const block = activeEntry()?.blocks.find((item) => item.id === blockId);
+  if (!audio.src && block?.audioId) await hydrateAudioSource(audio, block);
+  audio.muted = false;
+  audio.volume = 1;
   el.blockList.querySelectorAll("[data-audio]").forEach((item) => {
     if (item !== audio) {
       item.pause();
@@ -858,9 +1182,15 @@ async function toggleAudioPlayback(blockId) {
     }
   });
   if (audio.paused) {
-    await audio.play();
-    state.playingBlockId = blockId;
-    setAudioButtonState(blockId, true);
+    try {
+      await audio.play();
+      state.playingBlockId = blockId;
+      setAudioButtonState(blockId, true);
+    } catch {
+      state.playingBlockId = null;
+      setAudioButtonState(blockId, false);
+      showPlaybackError(blockId, "播放失败，请重新点击或检查录音文件。");
+    }
   } else {
     audio.pause();
     state.playingBlockId = null;
@@ -921,16 +1251,43 @@ function bindEvents() {
   });
 
   el.entryList.addEventListener("click", (event) => {
+    const deleteButton = event.target.closest("[data-delete-entry]");
+    if (deleteButton) {
+      deleteEntry(deleteButton.dataset.deleteEntry);
+      return;
+    }
+    const row = event.target.closest(".entry-row");
+    if (row?.classList.contains("swiped")) {
+      row.classList.remove("swiped");
+      return;
+    }
     const button = event.target.closest("[data-entry]");
     if (!button) return;
     state.activeEntryId = button.dataset.entry;
     state.mobileTab = "today";
     render();
   });
+  let entryTouchX = 0;
+  el.entryList.addEventListener("touchstart", (event) => {
+    const row = event.target.closest(".entry-row");
+    if (!row) return;
+    entryTouchX = event.touches[0].clientX;
+  }, { passive: true });
+  el.entryList.addEventListener("touchend", (event) => {
+    const row = event.target.closest(".entry-row");
+    if (!row) return;
+    const diff = event.changedTouches[0].clientX - entryTouchX;
+    document.querySelectorAll(".entry-row.swiped").forEach((item) => {
+      if (item !== row) item.classList.remove("swiped");
+    });
+    if (diff < -36) row.classList.add("swiped");
+    if (diff > 28) row.classList.remove("swiped");
+  }, { passive: true });
 
   el.titleInput.addEventListener("input", () => {
     const entry = activeEntry();
     entry.title = el.titleInput.value;
+    entry.titleEdited = true;
     touchEntry(entry);
   });
   el.titleInput.addEventListener("focus", enterEditing);
@@ -950,7 +1307,10 @@ function bindEvents() {
 
   el.blockList.addEventListener("input", (event) => {
     const textBlock = event.target.closest("[data-text-block]");
-    if (textBlock) updateBlock(textBlock.dataset.textBlock, { text: textBlock.textContent });
+    if (textBlock) {
+      if (maybeHandleDividerShortcut(textBlock.dataset.textBlock, textBlock.textContent)) return;
+      updateBlock(textBlock.dataset.textBlock, { text: textBlock.textContent });
+    }
     const caption = event.target.closest("[data-caption]");
     if (caption) updateBlock(caption.dataset.caption, { caption: caption.textContent });
   });
@@ -1025,7 +1385,10 @@ function bindEvents() {
     handleInsert(button.dataset.insert);
   });
 
-  el.insertDateTopBtn.addEventListener("click", () => insertBlock("date"));
+  el.insertDateTopBtn.addEventListener("click", () => {
+    const block = insertBlock("date");
+    openDateSheet(block?.id);
+  });
   document.querySelectorAll("[data-mobile-tab]").forEach((button) => {
     button.addEventListener("click", () => {
       state.mobileTab = button.dataset.mobileTab;
@@ -1037,35 +1400,45 @@ function bindEvents() {
     renderMobileView();
     handleInsert("audio", { autoStart: true });
   });
-  document.querySelectorAll("[data-insert-mobile]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.mobileTab = "today";
-      insertBlock(button.dataset.insertMobile, { text: "新的灵感：" });
-      render();
-    });
-  });
   el.imagePicker.addEventListener("change", () => handleImageFile(el.imagePicker.files[0]));
   el.coverPicker.addEventListener("change", () => handleCoverFile(el.coverPicker.files[0]));
   el.changeCoverBtn.addEventListener("click", (event) => {
     event.stopPropagation();
-    el.coverPicker.click();
+    openCoverSheet();
   });
-  el.resetCoverBtn.addEventListener("click", (event) => {
+  el.deleteEntryBtn?.addEventListener("click", (event) => {
     event.stopPropagation();
     const entry = activeEntry();
-    if (!entry) return;
-    entry.coverImage = "";
-    touchEntry(entry);
-    renderEditor();
+    if (entry) deleteEntry(entry.id);
   });
   el.coverArea.addEventListener("click", (event) => {
     if (event.target.closest(".cover-actions")) return;
-    el.coverPicker.click();
+    openCoverSheet();
   });
   el.sheetBackdrop.addEventListener("click", closeInsertSheet);
   el.insertSheet.addEventListener("click", (event) => {
     const button = event.target.closest("[data-sheet-insert]");
     if (button) handleSheetInsert(button.dataset.sheetInsert);
+  });
+  el.dateSheet.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-date-choice]");
+    if (!button) return;
+    const choices = {
+      today: todayISO(),
+      yesterday: dateOffsetISO(-1),
+      "before-yesterday": dateOffsetISO(-2)
+    };
+    setDateBlock(choices[button.dataset.dateChoice]);
+    closeInsertSheet();
+  });
+  el.datePickerInput.addEventListener("change", () => {
+    if (!el.datePickerInput.value) return;
+    setDateBlock(el.datePickerInput.value);
+    closeInsertSheet();
+  });
+  el.coverSheet.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-cover-choice]");
+    if (button) applyCoverChoice(button.dataset.coverChoice);
   });
   let sheetStartY = 0;
   el.insertSheet.addEventListener("touchstart", (event) => {
@@ -1077,6 +1450,14 @@ function bindEvents() {
   el.recordBtn.addEventListener("click", () => toggleRecording().catch(() => {
     el.speechStatus.textContent = "无法访问麦克风，请检查权限";
   }));
+  el.addIdeaBtn?.addEventListener("click", () => addIdea(el.ideaInput.value));
+  el.ideaInput?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") addIdea(el.ideaInput.value);
+  });
+  el.ideaList?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-delete-idea]");
+    if (button) deleteIdea(button.dataset.deleteIdea);
+  });
   el.saveEmailBtn?.addEventListener("click", () => {
     state.syncEmail = el.syncEmailInput.value.trim();
     if (state.syncEmail) {
@@ -1117,7 +1498,7 @@ async function init() {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("./sw.js?v=23").then((registration) => registration.update()).catch(() => {});
+  navigator.serviceWorker.register("./sw.js?v=24").then((registration) => registration.update()).catch(() => {});
 }
 
 init().catch((error) => {

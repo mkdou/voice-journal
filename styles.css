@@ -224,6 +224,18 @@ button {
   font-weight: 700;
 }
 
+.entry-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.entry-row.active .entry-button {
+  background: rgba(159, 219, 190, 0.24);
+  color: #244d3c;
+}
+
 .entry-button {
   grid-template-columns: 1fr auto;
   gap: 5px;
@@ -235,6 +247,15 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.entry-delete {
+  min-width: 56px;
+  border: 0;
+  border-radius: 12px;
+  background: #f7e8e4;
+  color: #a4473c;
+  font-weight: 800;
 }
 
 .entry-button time,
@@ -722,6 +743,101 @@ body.editing .mobile-tabbar {
   text-align: left;
 }
 
+.sheet-date-picker {
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  grid-template-areas:
+    "icon title"
+    "icon input";
+  min-height: 76px;
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.sheet-date-picker .vj-icon {
+  grid-area: icon;
+  width: 34px;
+  height: 34px;
+  padding: 7px;
+  border-radius: 11px;
+  background: var(--green-soft);
+  color: var(--green-deep);
+}
+
+.sheet-date-picker strong {
+  grid-area: title;
+}
+
+.sheet-date-picker input {
+  grid-area: input;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  outline: 0;
+}
+
+.playback-error {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f8e9e5;
+  color: #9a4037;
+  font-size: 13px;
+}
+
+.idea-create {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.idea-create input {
+  height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.84);
+  outline: 0;
+}
+
+.idea-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.idea-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.idea-item p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--ink);
+}
+
+.idea-item time {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.idea-item button {
+  border: 0;
+  background: transparent;
+  color: #a4473c;
+  font-weight: 800;
+}
+
 .insert-sheet .vj-icon {
   grid-area: icon;
   width: 34px;
@@ -937,7 +1053,16 @@ body.editing .mobile-tabbar {
   }
 
   .cover-actions {
-    display: none;
+    top: 12px;
+    right: 12px;
+    display: flex;
+    max-width: calc(100% - 24px);
+  }
+
+  .cover-actions button {
+    min-height: 32px;
+    padding: 0 10px;
+    font-size: 12px;
   }
 
   .cover p {
@@ -1092,5 +1217,29 @@ body.editing .mobile-tabbar {
     background: var(--green);
     color: #173d2e;
     box-shadow: 0 10px 24px rgba(63, 138, 104, 0.2);
+  }
+
+  .entry-row {
+    position: relative;
+    display: block;
+    overflow: hidden;
+  }
+
+  .entry-row .entry-button {
+    position: relative;
+    z-index: 1;
+    transition: transform 0.18s ease;
+  }
+
+  .entry-row .entry-delete {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 76px;
+  }
+
+  .entry-row.swiped .entry-button {
+    transform: translateX(-84px);
   }
 }

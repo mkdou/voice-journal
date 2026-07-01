@@ -1,4 +1,4 @@
-const CACHE_NAME = "voice-journal-v23";
+const CACHE_NAME = "voice-journal-v24";
 const STATIC_ASSETS = ["./manifest.webmanifest", "./icon.svg"];
 
 self.addEventListener("install", (event) => {

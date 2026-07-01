@@ -10,7 +10,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="icon.svg" />
-    <link rel="stylesheet" href="styles.css?v=craft-v3" />
+    <link rel="stylesheet" href="styles.css?v=craft-v4" />
   </head>
   <body>
     <div class="app-shell">
@@ -48,7 +48,7 @@
         <div class="cover" id="coverArea">
           <div class="cover-actions">
             <button type="button" id="changeCoverBtn">更换封面</button>
-            <button type="button" id="resetCoverBtn">恢复默认</button>
+            <button type="button" id="deleteEntryBtn">删除日记</button>
             <button type="button" aria-label="更多"><span data-icon="more"></span></button>
           </div>
           <p>听见生活，记录此刻</p>
@@ -106,9 +106,13 @@
 
       <section class="mobile-only-panel mobile-page" data-mobile-page="idea">
         <div class="mobile-panel-card">
-          <h2>灵感</h2>
-          <p>快速收集还没有整理成日记的想法。第一版先作为入口保留，后面可以接模板和灵感箱。</p>
-          <button class="panel-action" type="button" data-insert-mobile="text"><span data-icon="plus"></span> 写一条灵感</button>
+          <h2>灵感箱</h2>
+          <p>这里独立保存一句话、想法和临时声音，不会污染当前日记。</p>
+          <div class="idea-create">
+            <input id="ideaInput" type="text" placeholder="写一条灵感..." />
+            <button class="panel-action" id="addIdeaBtn" type="button"><span data-icon="plus"></span> 保存灵感</button>
+          </div>
+          <div class="idea-list" id="ideaList"></div>
         </div>
       </section>
 
@@ -145,10 +149,36 @@
         <button type="button" data-sheet-insert="todo"><span data-icon="check"></span><strong>待办</strong><small>待办事项</small></button>
         <button type="button" data-sheet-insert="quote"><span data-icon="quote"></span><strong>引用</strong><small>引用一段文字</small></button>
       </section>
+
+      <section class="insert-sheet option-sheet" id="dateSheet" hidden aria-label="选择日期">
+        <div class="sheet-handle"></div>
+        <h2>选择日期</h2>
+        <button type="button" data-date-choice="today"><span data-icon="calendar"></span><strong>今天</strong><small>记录今天</small></button>
+        <button type="button" data-date-choice="yesterday"><span data-icon="calendar"></span><strong>昨天</strong><small>回到昨天</small></button>
+        <button type="button" data-date-choice="before-yesterday"><span data-icon="calendar"></span><strong>前天</strong><small>回到前天</small></button>
+        <label class="sheet-date-picker">
+          <span data-icon="calendar"></span>
+          <strong>选择日期</strong>
+          <input id="datePickerInput" type="date" />
+        </label>
+      </section>
+
+      <section class="insert-sheet option-sheet" id="coverSheet" hidden aria-label="更换封面">
+        <div class="sheet-handle"></div>
+        <h2>更换封面</h2>
+        <button type="button" data-cover-choice="upload"><span data-icon="image"></span><strong>上传本地图片</strong><small>使用自己的照片</small></button>
+        <button type="button" data-cover-choice="forest"><span data-icon="image"></span><strong>默认森林</strong><small>安静的绿色封面</small></button>
+        <button type="button" data-cover-choice="ocean"><span data-icon="image"></span><strong>海边</strong><small>清透的蓝绿封面</small></button>
+        <button type="button" data-cover-choice="star"><span data-icon="image"></span><strong>星空</strong><small>深色夜空封面</small></button>
+        <button type="button" data-cover-choice="mountain"><span data-icon="image"></span><strong>山川</strong><small>柔和山脊封面</small></button>
+        <button type="button" data-cover-choice="city"><span data-icon="image"></span><strong>城市</strong><small>日常街景封面</small></button>
+        <button type="button" data-cover-choice="gradient"><span data-icon="image"></span><strong>纯色渐变</strong><small>浅绿色渐变</small></button>
+        <button type="button" data-cover-choice="delete"><span data-icon="close"></span><strong>删除封面</strong><small>恢复默认</small></button>
+      </section>
     </div>
 
     <input id="imagePicker" type="file" accept="image/*" hidden />
     <input id="coverPicker" type="file" accept="image/*" hidden />
-    <script src="app.js?v=craft-v3"></script>
+    <script src="app.js?v=craft-v4"></script>
   </body>
 </html>
