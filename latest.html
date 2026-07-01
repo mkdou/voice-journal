@@ -10,7 +10,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="icon.svg" />
-    <link rel="stylesheet" href="styles.css?v=craft-v4" />
+    <link rel="stylesheet" href="styles.css?v=craft-v5" />
   </head>
   <body>
     <div class="app-shell">
@@ -104,18 +104,6 @@
         </section>
       </aside>
 
-      <section class="mobile-only-panel mobile-page" data-mobile-page="idea">
-        <div class="mobile-panel-card">
-          <h2>灵感箱</h2>
-          <p>这里独立保存一句话、想法和临时声音，不会污染当前日记。</p>
-          <div class="idea-create">
-            <input id="ideaInput" type="text" placeholder="写一条灵感..." />
-            <button class="panel-action" id="addIdeaBtn" type="button"><span data-icon="plus"></span> 保存灵感</button>
-          </div>
-          <div class="idea-list" id="ideaList"></div>
-        </div>
-      </section>
-
       <section class="mobile-only-panel mobile-page" data-mobile-page="settings">
         <div class="mobile-panel-card">
           <h2>设置</h2>
@@ -133,7 +121,6 @@
         <button class="active" type="button" data-mobile-tab="today"><span data-icon="calendar"></span><small>今天</small></button>
         <button type="button" data-mobile-tab="diary"><span data-icon="book"></span><small>日记</small></button>
         <button class="record-tab" type="button" data-mobile-record><span data-icon="mic"></span><small>录音</small></button>
-        <button type="button" data-mobile-tab="idea"><span data-icon="pen"></span><small>灵感</small></button>
         <button type="button" data-mobile-tab="settings"><span data-icon="settings"></span><small>设置</small></button>
       </nav>
 
@@ -179,6 +166,6 @@
 
     <input id="imagePicker" type="file" accept="image/*" hidden />
     <input id="coverPicker" type="file" accept="image/*" hidden />
-    <script src="app.js?v=craft-v4"></script>
+    <script src="app.js?v=craft-v5"></script>
   </body>
 </html>

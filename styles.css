@@ -1181,7 +1181,7 @@ body.editing .mobile-tabbar {
     left: 14px;
     z-index: 20;
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 4px;
     padding: 8px;
     border: 1px solid var(--line);
@@ -1214,9 +1214,14 @@ body.editing .mobile-tabbar {
   }
 
   .mobile-tabbar .record-tab {
-    background: var(--green);
-    color: #173d2e;
-    box-shadow: 0 10px 24px rgba(63, 138, 104, 0.2);
+    background: transparent;
+    color: var(--muted);
+    box-shadow: none;
+  }
+
+  .mobile-tabbar .record-tab:active {
+    background: var(--green-soft);
+    color: var(--green-deep);
   }
 
   .entry-row {
@@ -1237,9 +1242,20 @@ body.editing .mobile-tabbar {
     right: 0;
     bottom: 0;
     width: 76px;
+    z-index: 2;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(100%);
+    transition: opacity 0.18s ease, transform 0.18s ease;
   }
 
   .entry-row.swiped .entry-button {
     transform: translateX(-84px);
+  }
+
+  .entry-row.swiped .entry-delete {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(0);
   }
 }
