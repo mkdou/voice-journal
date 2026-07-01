@@ -459,6 +459,10 @@ button {
   margin-bottom: 10px;
 }
 
+.toolbar[hidden] {
+  display: none;
+}
+
 .toolbar button {
   min-width: 36px;
   height: 34px;
@@ -559,6 +563,13 @@ button {
   border-radius: 4px;
   font-size: 13px;
   line-height: 1;
+}
+
+.date-chip::after {
+  content: "×";
+  opacity: 0.72;
+  font-size: 14px;
+  font-weight: 900;
 }
 
 .craft-block {

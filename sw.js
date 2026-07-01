@@ -1,4 +1,4 @@
-const CACHE_NAME = "voice-journal-v16";
+const CACHE_NAME = "voice-journal-v18";
 const STATIC_ASSETS = ["./manifest.webmanifest", "./icon.svg"];
 
 self.addEventListener("install", (event) => {
@@ -18,6 +18,7 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   const isAppShell = url.pathname.endsWith("/") ||
     url.pathname.endsWith("/index.html") ||
+    url.pathname.endsWith("/latest.html") ||
     url.pathname.endsWith("/app.js") ||
     url.pathname.endsWith("/styles.css");
 

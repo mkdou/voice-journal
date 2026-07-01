@@ -607,24 +607,65 @@ function deleteDateChip(chip) {
 }
 
 function applyMarkdown(action) {
-  el.bodyInput.focus();
-  const selected = window.getSelection()?.toString() || "";
+  const selected = editorSelectionText();
+  if (action === "date" || action === "divider") {
+    el.bodyInput.focus();
+    const snippets = {
+      date: fixedDateMarkdown(),
+      divider: `<div class="craft-block"><br></div><p><br></p>`
+    };
+    insertAtCursor(snippets[action] || "");
+    return;
+  }
+
+  if (!selected) {
+    el.recordHint.textContent = "先选中正文里的文字，再使用格式工具";
+    return;
+  }
+
   if (action === "bold" || action === "italic") {
     document.execCommand(action === "bold" ? "bold" : "italic", false);
-    if (!selected) insertAtCursor(action === "bold" ? "<strong>加粗文字</strong>" : "<em>斜体文字</em>");
+    saveBodyFromEditor();
+    return;
+  }
+
+  if (action === "heading") {
+    document.execCommand("formatBlock", false, "h2");
+    saveBodyFromEditor();
+    return;
+  }
+
+  if (action === "quote") {
+    document.execCommand("formatBlock", false, "blockquote");
+    saveBodyFromEditor();
+    return;
+  }
+
+  if (action === "list") {
+    document.execCommand("insertUnorderedList", false);
     saveBodyFromEditor();
     return;
   }
 
   const snippets = {
-    heading: `<h2>${escapeHtml(selected || "小标题")}</h2>`,
-    quote: `<blockquote>${escapeHtml(selected || "引用")}</blockquote>`,
-    list: `<ul><li>${escapeHtml(selected || "列表项")}</li></ul>`,
-    check: `<label class="todo-line"><input type="checkbox"> <span>${escapeHtml(selected || "待办")}</span></label>`,
-    date: fixedDateMarkdown(),
-    divider: `<div class="craft-block"><br></div><p><br></p>`
+    check: `<label class="todo-line"><input type="checkbox"> <span>${escapeHtml(selected)}</span></label>`
   };
   insertAtCursor(snippets[action] || "");
+}
+
+function editorSelectionText() {
+  const selection = window.getSelection();
+  if (!selection?.rangeCount || selection.isCollapsed) return "";
+  const range = selection.getRangeAt(0);
+  if (!el.bodyInput.contains(range.commonAncestorContainer)) return "";
+  return selection.toString().trim();
+}
+
+function updateToolbarVisibility() {
+  const selection = window.getSelection();
+  const selectionInEditor = Boolean(selection?.rangeCount && el.bodyInput.contains(selection.getRangeAt(0).commonAncestorContainer));
+  const focusInEditor = document.activeElement === el.bodyInput || el.bodyInput.contains(document.activeElement);
+  el.toolbar.hidden = !(focusInEditor || selectionInEditor);
 }
 
 function runSlashCommand(command) {
@@ -1056,10 +1097,19 @@ function bindEvents() {
   el.bodyInput.addEventListener("input", () => {
     handleEditorShortcuts();
     saveBodyFromEditor();
+    updateToolbarVisibility();
   });
   el.bodyInput.addEventListener("keyup", () => {
     handleEditorShortcuts();
     saveBodyFromEditor();
+    updateToolbarVisibility();
+  });
+  el.bodyInput.addEventListener("focus", updateToolbarVisibility);
+  el.bodyInput.addEventListener("mouseup", updateToolbarVisibility);
+  document.addEventListener("selectionchange", updateToolbarVisibility);
+  document.addEventListener("pointerdown", (event) => {
+    if (event.target.closest(".toolbar") || event.target.closest("#bodyInput")) return;
+    window.setTimeout(updateToolbarVisibility, 80);
   });
   el.bodyInput.addEventListener("click", (event) => {
     const chip = event.target.closest(".date-chip[data-date]");
@@ -1075,6 +1125,9 @@ function bindEvents() {
     render();
   });
 
+  el.toolbar.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+  });
   el.toolbar.addEventListener("click", (event) => {
     const button = event.target.closest("[data-md]");
     if (button) applyMarkdown(button.dataset.md);
@@ -1151,7 +1204,7 @@ function registerServiceWorker() {
     window.location.reload();
   });
 
-  navigator.serviceWorker.register("./sw.js?v=14")
+  navigator.serviceWorker.register("./sw.js?v=18")
     .then((registration) => registration.update())
     .catch(() => {
       el.speechStatus.textContent = "离线缓存暂不可用，其他功能正常";
