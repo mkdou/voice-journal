@@ -400,6 +400,10 @@ button {
   font-size: 17px;
 }
 
+.doc-subtitle.hidden-subtitle {
+  display: none;
+}
+
 .block-list {
   display: grid;
   gap: 18px;
@@ -423,8 +427,12 @@ button {
 }
 
 .text-block:empty::before {
-  content: "输入文字...";
+  content: "";
   color: #b7b3aa;
+}
+
+.text-block:focus:empty::before {
+  content: "输入文字...";
 }
 
 .date-block {

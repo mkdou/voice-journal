@@ -488,6 +488,7 @@ function renderEditor() {
   if (!entry) return;
   el.titleInput.value = displayEntryTitle(entry);
   el.subtitleInput.value = entry.subtitle || "";
+  el.subtitleInput.classList.toggle("hidden-subtitle", !entry.subtitle);
   el.coverArea.style.backgroundImage = coverBackground(entry);
   el.blockList.innerHTML = entry.blocks.map(renderBlock).join("");
   attachAudioListeners();
@@ -573,7 +574,6 @@ function renderAudioBlock(block, menu) {
       <div class="voice-actions">
         <button type="button" data-copy-transcript="${block.id}">复制转写</button>
         <button type="button" data-organize-transcript="${block.id}">整理成日记</button>
-        <button type="button" class="more-button" aria-label="更多">${icon("more")}</button>
       </div>
       ${block.audioId || block.audioDataUrl ? `<audio class="sr-audio" preload="metadata" data-audio="${block.id}" data-audio-id="${escapeHtml(block.audioId || "")}" ${block.audioDataUrl ? `src="${block.audioDataUrl}"` : ""}></audio>` : `<div class="playback-error">这段录音没有可播放文件。</div>`}
       ${menu}
@@ -589,7 +589,6 @@ function renderPlayer(block) {
       <span class="player-time" data-current-time="${block.id}">00:00</span>
       <input class="progress" data-progress="${block.id}" type="range" min="0" max="${Math.max(1, Math.round((block.durationMs || 0) / 1000))}" value="0" />
       <span class="player-time">${escapeHtml(duration)}</span>
-      <button class="more-button" type="button" aria-label="更多">${icon("more")}</button>
     </div>
   `;
 }
@@ -1121,7 +1120,25 @@ function exitEditing() {
   if (state.sheetOpen) return;
   state.editing = false;
   document.body.classList.remove("editing");
+  cleanupEmptyTextBlocks();
   queueSave();
+}
+
+function cleanupEmptyTextBlocks() {
+  const entry = activeEntry();
+  if (!entry) return;
+  const originalLength = entry.blocks.length;
+  entry.blocks = entry.blocks.filter((block) => {
+    if (block.type !== "text") return true;
+    if (String(block.text || "").trim()) return true;
+    return originalLength <= 1;
+  });
+  if (entry.blocks.length === originalLength) return;
+  if (!entry.blocks.some((block) => block.id === state.activeBlockId)) {
+    state.activeBlockId = entry.blocks[entry.blocks.length - 1]?.id || null;
+  }
+  touchEntry(entry);
+  render();
 }
 
 function updateKeyboardOffset() {
@@ -1343,6 +1360,7 @@ function bindEvents() {
   el.subtitleInput.addEventListener("input", () => {
     const entry = activeEntry();
     entry.subtitle = el.subtitleInput.value;
+    el.subtitleInput.classList.toggle("hidden-subtitle", !entry.subtitle);
     touchEntry(entry);
   });
   el.subtitleInput.addEventListener("focus", enterEditing);
@@ -1546,7 +1564,7 @@ async function init() {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("./sw.js?v=25").then((registration) => registration.update()).catch(() => {});
+  navigator.serviceWorker.register("./sw.js?v=26").then((registration) => registration.update()).catch(() => {});
 }
 
 init().catch((error) => {
