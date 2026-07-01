@@ -1,104 +1,89 @@
 const DB_NAME = "voice-journal-db";
-const DB_VERSION = 2;
-const TRANSCRIBE_ENDPOINT_KEY = "voiceJournalTranscribeEndpoint";
-const DEFAULT_TRANSCRIBE_ENDPOINT = "https://voice-journal-nu.vercel.app/api/transcribe";
+const DB_VERSION = 3;
 
-const defaultFolders = [
-  { id: "daily", name: "日常" },
-  { id: "ideas", name: "想法" },
-  { id: "review", name: "复盘" }
+const folders = [
+  { id: "all", name: "全部日记", icon: "▦" },
+  { id: "daily", name: "碎碎念", icon: "✦" },
+  { id: "travel", name: "旅行日记", icon: "♧" },
+  { id: "read", name: "读书笔记", icon: "♢" },
+  { id: "review", name: "每日复盘", icon: "☼" }
 ];
-
-const sampleBody = `<h2>今天的记录</h2>
-<p>输入 <strong>/今天</strong> 可以插入固定日期；输入 <strong>===</strong> 可以生成白色方块。你也可以直接开始录音，转写文本会自动追加到这里。</p>
-<p>- 心情：</p>
-<p>- 重要事情：</p>
-<p>- 明天继续：</p>`;
 
 const state = {
   db: null,
-  folders: [],
   entries: [],
-  activeFolderId: "all",
   activeEntryId: null,
-  reviewEntryId: null,
-  activeView: "record",
+  activeFolderId: "all",
   search: "",
+  activeBlockId: null,
   recorder: null,
   mediaStream: null,
   recognition: null,
+  recordingBlockId: null,
   chunks: [],
-  segmentChunks: [],
   liveTranscript: "",
   recordingStartedAt: 0,
   timerId: null,
-  segmentStartedAt: null,
-  stopRequested: false
+  saveTimer: null
 };
 
 const el = {
-  folderList: document.querySelector("#folderList"),
-  entryList: document.querySelector("#entryList"),
-  currentFolderName: document.querySelector("#currentFolderName"),
-  entryCount: document.querySelector("#entryCount"),
-  addFolderBtn: document.querySelector("#addFolderBtn"),
-  newEntryBtn: document.querySelector("#newEntryBtn"),
-  reviewTabBtn: document.querySelector("#reviewTabBtn"),
-  recordPanel: document.querySelector('[data-view-panel="record"]'),
-  reviewPanel: document.querySelector('[data-view-panel="review"]'),
-  searchInput: document.querySelector("#searchInput"),
+  saveStatus: document.querySelector("#saveStatus"),
   speechStatus: document.querySelector("#speechStatus"),
+  newEntryBtn: document.querySelector("#newEntryBtn"),
+  searchInput: document.querySelector("#searchInput"),
+  folderNav: document.querySelector("#folderNav"),
+  entryList: document.querySelector("#entryList"),
   titleInput: document.querySelector("#titleInput"),
-  entryDateInput: document.querySelector("#entryDateInput"),
-  entryFolderSelect: document.querySelector("#entryFolderSelect"),
-  publishEntryBtn: document.querySelector("#publishEntryBtn"),
-  reviewDetail: document.querySelector("#reviewDetail"),
+  subtitleInput: document.querySelector("#subtitleInput"),
+  blockList: document.querySelector("#blockList"),
+  imagePicker: document.querySelector("#imagePicker"),
   recordBtn: document.querySelector("#recordBtn"),
-  recordLabel: document.querySelector("#recordLabel"),
-  recordTimer: document.querySelector("#recordTimer"),
-  recordHint: document.querySelector("#recordHint"),
-  liveTranscriptBox: document.querySelector("#liveTranscriptBox"),
-  liveTranscriptText: document.querySelector("#liveTranscriptText"),
-  saveSegmentBtn: document.querySelector("#saveSegmentBtn"),
-  bodyInput: document.querySelector("#bodyInput"),
-  slashHelper: document.querySelector("#slashHelper"),
-  toolbar: document.querySelector(".toolbar"),
-  segments: document.querySelector("#segments"),
-  copyTranscriptBtn: document.querySelector("#copyTranscriptBtn")
+  liveTranscript: document.querySelector("#liveTranscript"),
+  audioMiniList: document.querySelector("#audioMiniList"),
+  audioCount: document.querySelector("#audioCount"),
+  insertDateTopBtn: document.querySelector("#insertDateTopBtn"),
+  closeHintBtn: document.querySelector("#closeHintBtn"),
+  closeDockBtn: document.querySelector("#closeDockBtn")
 };
 
 function uid(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function nowISO() {
+  return new Date().toISOString();
+}
+
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function formatDateTime(value) {
-  return new Intl.DateTimeFormat("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(new Date(value));
-}
-
-function formatTimer(ms) {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
-  const seconds = String(totalSeconds % 60).padStart(2, "0");
-  return `${minutes}:${seconds}`;
-}
-
-function weekdayName(dateText) {
-  return new Intl.DateTimeFormat("zh-CN", { weekday: "short" }).format(new Date(`${dateText}T00:00:00`));
-}
-
-function displayDate(dateText) {
+function displayDate(dateText = todayISO()) {
   const date = new Date(`${dateText}T00:00:00`);
-  return new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric" }).format(date);
+  const monthDay = new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric" }).format(date);
+  const weekday = new Intl.DateTimeFormat("zh-CN", { weekday: "short" }).format(date);
+  return dateText === todayISO() ? "今天" : `${monthDay} ${weekday}`;
+}
+
+function formatTime(value) {
+  return new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+}
+
+function relativeDay(value) {
+  const today = new Date(todayISO());
+  const date = new Date(`${String(value).slice(0, 10)}T00:00:00`);
+  const diff = Math.round((today - date) / 86400000);
+  if (diff === 0) return "今天";
+  if (diff === 1) return "昨天";
+  return `${diff}天前`;
+}
+
+function formatDuration(ms) {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = String(Math.floor(seconds / 60)).padStart(2, "0");
+  const rest = String(seconds % 60).padStart(2, "0");
+  return `${minutes}:${rest}`;
 }
 
 function openDb() {
@@ -106,82 +91,100 @@ function openDb() {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
     request.onupgradeneeded = () => {
       const db = request.result;
-      ensureObjectStore(db, "folders");
-      ensureObjectStore(db, "entries");
+      if (!db.objectStoreNames.contains("entries")) db.createObjectStore("entries", { keyPath: "id" });
+      if (!db.objectStoreNames.contains("folders")) db.createObjectStore("folders", { keyPath: "id" });
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
-    request.onblocked = () => reject(new Error("数据库被旧页面占用，请关闭其他已打开的日记页面后重试。"));
   });
 }
 
-function ensureObjectStore(db, name) {
-  if (!db.objectStoreNames.contains(name)) {
-    db.createObjectStore(name, { keyPath: "id" });
-  }
+function store(name, mode = "readonly") {
+  return state.db.transaction(name, mode).objectStore(name);
 }
 
-function tx(storeName, mode = "readonly") {
-  return state.db.transaction(storeName, mode).objectStore(storeName);
-}
-
-function getAll(storeName) {
+function getAll(name) {
   return new Promise((resolve, reject) => {
-    const request = tx(storeName).getAll();
+    const request = store(name).getAll();
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
 }
 
-function put(storeName, value) {
+function putEntry(entry) {
   return new Promise((resolve, reject) => {
-    const request = tx(storeName, "readwrite").put(value);
-    request.onsuccess = () => resolve(value);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-function deleteFromStore(storeName, key) {
-  return new Promise((resolve, reject) => {
-    const request = tx(storeName, "readwrite").delete(key);
-    request.onsuccess = () => resolve();
+    const request = store("entries", "readwrite").put(entry);
+    request.onsuccess = () => resolve(entry);
     request.onerror = () => reject(request.error);
   });
 }
 
 async function seedIfNeeded() {
-  const folders = await getAll("folders");
-  if (!folders.length) {
-    await Promise.all(defaultFolders.map((folder) => put("folders", folder)));
-  }
   const entries = await getAll("entries");
-  if (!entries.length) {
-    const entry = createEntry("daily");
-    entry.title = "第一篇语音日记";
-    entry.body = sampleBody;
-    await put("entries", entry);
-  }
+  if (entries.length) return;
+  const entry = createEntry();
+  entry.title = `${new Date().getMonth() + 1}月${new Date().getDate()}日 · 碎碎念`;
+  entry.subtitle = "写下今天的感受...";
+  entry.blocks = [
+    { id: uid("block"), type: "date", date: todayISO() },
+    { id: uid("block"), type: "text", text: "从这里开始记录今天。可以插入文字、图片、日期，也可以把录音放在任意位置。" },
+    { id: uid("block"), type: "audio", duration: "00:00", transcript: "声音片段会保留播放器、原始音频和实时转写文字。", createdAt: nowISO() }
+  ];
+  await putEntry(entry);
 }
 
-function createEntry(folderId = state.activeFolderId === "all" ? "daily" : state.activeFolderId) {
-  const now = new Date().toISOString();
+function createEntry(folderId = "daily") {
+  const now = nowISO();
   return {
     id: uid("entry"),
     title: "未命名日记",
-    body: "",
-    date: todayISO(),
+    subtitle: "",
     folderId,
-    segments: [],
+    date: todayISO(),
+    blocks: [
+      { id: uid("block"), type: "date", date: todayISO() },
+      { id: uid("block"), type: "text", text: "" }
+    ],
     createdAt: now,
     updatedAt: now
   };
 }
 
 async function loadData() {
-  state.folders = await getAll("folders");
-  state.entries = (await getAll("entries")).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
-  if (!state.activeEntryId && state.entries[0]) state.activeEntryId = state.entries[0].id;
+  state.entries = (await getAll("entries")).map(normalizeEntry).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+  if (!state.activeEntryId) state.activeEntryId = state.entries[0]?.id || null;
   render();
+}
+
+function normalizeEntry(entry) {
+  if (Array.isArray(entry.blocks)) return entry;
+  const blocks = [];
+  blocks.push({ id: uid("block"), type: "date", date: entry.date || todayISO() });
+  if (entry.body) {
+    blocks.push({ id: uid("block"), type: "text", text: htmlToText(entry.body) });
+  }
+  (entry.segments || []).forEach((segment) => {
+    blocks.push({
+      id: segment.id || uid("block"),
+      type: "audio",
+      audioDataUrl: segment.audioDataUrl || "",
+      duration: segment.duration || "00:00",
+      transcript: segment.text || "",
+      createdAt: segment.createdAt || entry.updatedAt || nowISO()
+    });
+  });
+  if (blocks.length < 2) blocks.push({ id: uid("block"), type: "text", text: "" });
+  return {
+    ...entry,
+    subtitle: entry.subtitle || "",
+    blocks
+  };
+}
+
+function htmlToText(html) {
+  const template = document.createElement("template");
+  template.innerHTML = html || "";
+  return template.content.textContent.trim();
 }
 
 function activeEntry() {
@@ -192,691 +195,234 @@ function filteredEntries() {
   const search = state.search.trim().toLowerCase();
   return state.entries.filter((entry) => {
     const inFolder = state.activeFolderId === "all" || entry.folderId === state.activeFolderId;
-    const text = `${entry.title} ${plainText(entry.body)} ${(entry.segments || []).map((segment) => segment.text).join(" ")}`.toLowerCase();
+    const text = `${entry.title} ${entry.subtitle} ${entry.blocks.map(blockText).join(" ")}`.toLowerCase();
     return inFolder && (!search || text.includes(search));
   });
 }
 
-function render() {
-  renderView();
-  renderFolders();
-  renderReviewDetail();
-  renderEntries();
-  renderEditor();
+function blockText(block) {
+  if (block.type === "text") return block.text || "";
+  if (block.type === "date") return displayDate(block.date);
+  if (block.type === "audio") return block.transcript || "";
+  if (block.type === "image") return block.caption || "";
+  return "";
 }
 
-function renderView() {
-  const isReview = state.activeView === "review";
-  el.recordPanel.hidden = isReview;
-  el.reviewPanel.hidden = !isReview;
-  el.newEntryBtn.classList.toggle("active", !isReview);
-  el.reviewTabBtn.classList.toggle("active", isReview);
+function render() {
+  renderFolders();
+  renderEntries();
+  renderEditor();
+  renderAudioDock();
 }
 
 function renderFolders() {
-  const allCount = state.entries.length;
-  const folders = [{ id: "all", name: "全部日记", count: allCount }, ...state.folders.map((folder) => ({
-    ...folder,
-    count: state.entries.filter((entry) => entry.folderId === folder.id).length
-  }))];
-
-  el.folderList.innerHTML = folders.map((folder) => `
-    <button class="folder-item ${folder.id === state.activeFolderId ? "active" : ""}" data-folder-id="${folder.id}" type="button">
-      <span class="folder-name">${escapeHtml(folder.name)}</span>
-      <span class="folder-count">${folder.count}</span>
-    </button>
-  `).join("");
-
-  el.entryFolderSelect.innerHTML = state.folders.map((folder) => `
-    <option value="${folder.id}">${escapeHtml(folder.name)}</option>
-  `).join("");
+  el.folderNav.innerHTML = folders.map((folder) => {
+    const count = folder.id === "all"
+      ? state.entries.length
+      : state.entries.filter((entry) => entry.folderId === folder.id).length;
+    return `
+      <button class="folder-button ${state.activeFolderId === folder.id ? "active" : ""}" data-folder="${folder.id}" type="button">
+        <span>${folder.icon}</span>
+        <strong>${escapeHtml(folder.name)}</strong>
+        <small>${count}</small>
+      </button>
+    `;
+  }).join("");
 }
 
 function renderEntries() {
   const entries = filteredEntries();
-  const folder = state.folders.find((item) => item.id === state.activeFolderId);
-  el.currentFolderName.textContent = state.activeFolderId === "all" ? "全部日记" : folder?.name || "日记";
-  el.entryCount.textContent = entries.length;
-
   if (!entries.length) {
-    el.entryList.innerHTML = `<div class="empty-state">这里还没有日记。新建一篇，或换个搜索词。</div>`;
+    el.entryList.innerHTML = `<div class="empty-state">没有找到日记</div>`;
     return;
   }
+  el.entryList.innerHTML = entries.map((entry) => `
+    <button class="entry-button ${entry.id === state.activeEntryId ? "active" : ""}" data-entry="${entry.id}" type="button">
+      <span>${escapeHtml(entry.title || "未命名日记")}</span>
+      <time>${relativeDay(entry.date || entry.createdAt)}</time>
+      <small>${escapeHtml(entry.subtitle || previewEntry(entry))}</small>
+    </button>
+  `).join("");
+}
 
-  el.entryList.innerHTML = entries.map((entry) => {
-    const preview = (plainText(entry.body) || (entry.segments || []).map((segment) => segment.text).join(" ") || "还没有正文").replace(/\s+/g, " ").trim();
-    return `
-      <div class="entry-item ${entry.id === state.reviewEntryId ? "active" : ""}" data-entry-id="${entry.id}">
-        <button class="entry-open" data-open-entry="${entry.id}" type="button">
-          <span class="entry-title">${escapeHtml(entry.title || "未命名日记")}</span>
-          <span class="entry-preview">${escapeHtml(preview)}</span>
-          <span class="entry-date">${escapeHtml(entry.date)} · ${escapeHtml(formatDateTime(entry.updatedAt))}</span>
-        </button>
-        <button class="entry-delete" data-delete-entry="${entry.id}" type="button" title="删除日记">删除</button>
-      </div>
-    `;
-  }).join("");
+function previewEntry(entry) {
+  return entry.blocks.map(blockText).join(" ").replace(/\s+/g, " ").trim().slice(0, 32) || "还没有内容";
 }
 
 function renderEditor() {
   const entry = activeEntry();
-  const disabled = !entry;
-  [el.titleInput, el.entryDateInput, el.entryFolderSelect, el.recordBtn, el.saveSegmentBtn].forEach((node) => {
-    node.disabled = disabled;
-  });
-  el.bodyInput.contentEditable = disabled ? "false" : "true";
-
-  if (!entry) {
-    el.titleInput.value = "";
-    el.bodyInput.innerHTML = "";
-    el.segments.innerHTML = `<div class="empty-state">选择或新建一篇日记。</div>`;
-    return;
-  }
-
-  if (document.activeElement !== el.titleInput) el.titleInput.value = entry.title;
-  if (document.activeElement !== el.bodyInput) {
-    el.bodyInput.innerHTML = normalizeBodyHtml(entry.body);
-    refreshDateChips();
-  }
-  el.entryDateInput.value = entry.date;
-  el.entryFolderSelect.value = entry.folderId;
-  renderSegments(entry);
+  if (!entry) return;
+  el.titleInput.value = entry.title || "";
+  el.subtitleInput.value = entry.subtitle || "";
+  el.blockList.innerHTML = entry.blocks.map(renderBlock).join("");
 }
 
-function renderReviewDetail() {
-  if (!el.reviewDetail) return;
-  const entry = state.entries.find((item) => item.id === state.reviewEntryId) || filteredEntries()[0] || null;
-  if (!entry) {
-    el.reviewDetail.innerHTML = `<div class="empty-state">还没有可回看的日记。</div>`;
-    return;
+function renderBlock(block) {
+  const menu = `<div class="block-menu"><button data-delete-block="${block.id}" type="button">···</button></div>`;
+  if (block.type === "date") {
+    return `<section class="block" data-block="${block.id}"><div class="date-block">▦ ${escapeHtml(displayDate(block.date))}</div>${menu}</section>`;
   }
-  state.reviewEntryId = entry.id;
-  const folder = state.folders.find((item) => item.id === entry.folderId)?.name || "日记";
-  const sortedSegments = (entry.segments || [])
-    .slice()
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  const reviewSegments = sortedSegments.map((segment, index) => {
-    const audioUrl = segmentAudioUrl(segment);
-    const text = segmentText(segment);
+  if (block.type === "image") {
     return `
-      <section class="review-segment">
-        <div class="segment-top">
-          <span>录音 ${index + 1} · ${escapeHtml(formatDateTime(segment.createdAt))}</span>
-          <span class="segment-duration">${escapeHtml(segment.duration || "00:00")}</span>
-        </div>
-        ${audioUrl ? `<audio controls src="${audioUrl}"></audio>` : `<div class="missing-audio">这段没有保存到录音文件，只保留了转写文字。</div>`}
-        ${text ? `<p class="segment-text">${escapeHtml(text)}</p>` : ""}
-        ${audioUrl ? `<div class="segment-actions"><a href="${audioUrl}" download="${escapeHtml(entry.date)}-${index + 1}.webm">下载录音</a></div>` : ""}
+      <section class="block image-block" data-block="${block.id}">
+        <img src="${block.src}" alt="${escapeHtml(block.caption || "日记图片")}" />
+        <div class="image-caption" contenteditable="true" data-caption="${block.id}">${escapeHtml(block.caption || "添加图片说明")}</div>
+        ${menu}
       </section>
     `;
-  }).join("");
-  el.reviewDetail.innerHTML = `
-    <div class="review-detail-head">
-      <div>
-        <h3>${escapeHtml(entry.title || "未命名日记")}</h3>
-        <p>${escapeHtml(entry.date)} · ${escapeHtml(folder)} · ${escapeHtml(formatDateTime(entry.updatedAt))}</p>
-      </div>
-      <button class="secondary-action" type="button" data-edit-review-entry="${entry.id}">编辑</button>
-    </div>
-    <div class="review-body">${normalizeBodyHtml(entry.body) || "<p>这篇还没有正文。</p>"}</div>
-    <div class="review-segments">
-      <div class="section-heading">
-        <span>录音与转写</span>
-        <span class="muted-count">${sortedSegments.length}</span>
-      </div>
-      ${reviewSegments || `<div class="empty-state">这篇还没有录音分段。</div>`}
-    </div>
+  }
+  if (block.type === "audio") {
+    const recording = state.recordingBlockId === block.id;
+    return `
+      <section class="block audio-block" data-block="${block.id}">
+        <div class="audio-top">
+          <div class="audio-title"><span class="audio-icon">🎙</span><span>声音片段 · ${escapeHtml(block.duration || "00:00")}</span></div>
+          <span class="audio-meta">${escapeHtml(block.createdAt ? formatTime(block.createdAt) : "")}</span>
+        </div>
+        ${recording ? `<div class="recording-chip">正在录音 ${escapeHtml(currentRecordingDuration())}</div>` : ""}
+        ${block.audioDataUrl ? `<audio controls src="${block.audioDataUrl}"></audio>` : ""}
+        <div class="transcript">${escapeHtml(block.transcript || "开始录音后，实时转写会保存在这里。")}</div>
+        ${menu}
+      </section>
+    `;
+  }
+  return `
+    <section class="block" data-block="${block.id}">
+      <div class="text-block" contenteditable="true" data-text-block="${block.id}">${escapeHtml(block.text || "")}</div>
+      ${menu}
+    </section>
   `;
-  refreshDateChipsIn(el.reviewDetail);
 }
 
-function renderSegments(entry) {
-  const segments = entry.segments || [];
-  if (!segments.length) {
-    el.segments.innerHTML = `<div class="empty-state">录音后会出现音频、时间戳和中文转写分段。</div>`;
+function renderAudioDock() {
+  const entry = activeEntry();
+  const audioBlocks = (entry?.blocks || []).filter((block) => block.type === "audio");
+  el.audioCount.textContent = audioBlocks.length;
+  if (!audioBlocks.length) {
+    el.audioMiniList.innerHTML = `<div class="empty-state">还没有声音片段</div>`;
     return;
   }
-
-  const sortedSegments = [...segments].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  el.segments.innerHTML = sortedSegments.map((segment, index) => {
-    const audioUrl = segmentAudioUrl(segment);
-    const hasAudio = Boolean(audioUrl);
-    return `
-      <div class="segment-card">
-        <div class="segment-top">
-          <span>分段 ${index + 1} · ${escapeHtml(formatDateTime(segment.createdAt))}</span>
-          <span class="segment-duration">录音时长 ${escapeHtml(segment.duration || "00:00")}</span>
-        </div>
-        ${audioUrl ? `<audio controls src="${audioUrl}"></audio>` : ""}
-        <p class="segment-text">${escapeHtml(segmentText(segment))}</p>
-        <div class="segment-actions">
-          <button type="button" data-append-segment="${segment.id}">追加到正文</button>
-          ${hasAudio ? `<a href="${audioUrl}" download="${escapeHtml(entry.date)}-${index + 1}.webm">下载录音</a>` : ""}
-          <button class="danger-action" type="button" data-delete-segment="${segment.id}">删除分段</button>
-        </div>
-      </div>
-    `;
-  }).join("");
+  el.audioMiniList.innerHTML = audioBlocks.map((block) => `
+    <div class="mini-audio">
+      <b>▷</b>
+      <span>${escapeHtml(block.transcript || "未转写")}</span>
+      <time>${escapeHtml(block.duration || "00:00")}</time>
+    </div>
+  `).join("");
 }
 
-function segmentAudioUrl(segment) {
-  if (segment?.audio instanceof Blob && segment.audio.size > 0) {
-    return URL.createObjectURL(segment.audio);
-  }
-  return segment?.audioDataUrl || "";
+function currentRecordingDuration() {
+  if (!state.recordingStartedAt) return "00:00";
+  return formatDuration(Date.now() - state.recordingStartedAt);
 }
 
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+function setActiveBlock(blockId) {
+  state.activeBlockId = blockId;
 }
 
-function segmentText(segment) {
-  if (segment.transcriptionStatus === "error" && !segment.text) return "这段录音暂时没有转写文字。";
-  if (segment.transcriptSource === "cloud" && segment.text) return `准确转写：${segment.text}`;
-  return segment.text || "这段录音暂时没有转写文字。";
-}
-
-function plainText(html) {
-  const template = document.createElement("template");
-  template.innerHTML = normalizeBodyHtml(html);
-  template.content.querySelectorAll(".date-chip[data-date]").forEach((chip) => {
-    const date = chip.dataset.date;
-    chip.textContent = date === todayISO() ? "今天" : `${displayDate(date)} ${weekdayName(date)}`;
-  });
-  return template.content.textContent || "";
-}
-
-async function updateActiveEntry(patch) {
-  const entry = activeEntry();
-  if (!entry) return;
-  Object.assign(entry, patch, { updatedAt: new Date().toISOString() });
-  await put("entries", entry);
-  state.entries = state.entries.map((item) => item.id === entry.id ? entry : item)
-    .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
-  render();
-}
-
-async function replaceSegment(segmentId, patch) {
+function insertBlock(type, payload = {}) {
   const entry = activeEntry();
   if (!entry) return null;
-  const segments = (entry.segments || []).map((segment) => (
-    segment.id === segmentId ? { ...segment, ...patch } : segment
-  ));
-  await updateActiveEntry({ segments });
-  return segments.find((segment) => segment.id === segmentId) || null;
-}
-
-async function deleteActiveEntry(entryId) {
-  const entry = state.entries.find((item) => item.id === entryId);
-  if (!entry) return;
-  const title = entry.title || "未命名日记";
-  if (!confirm(`删除「${title}」？这会同时删除里面保存的录音分段。`)) return;
-
-  await deleteFromStore("entries", entryId);
-  state.entries = state.entries.filter((item) => item.id !== entryId);
-  if (state.reviewEntryId === entryId) state.reviewEntryId = null;
-  if (state.activeEntryId === entryId) {
-    state.activeEntryId = filteredEntries()[0]?.id || state.entries[0]?.id || null;
-  }
+  const block = createBlock(type, payload);
+  const index = entry.blocks.findIndex((item) => item.id === state.activeBlockId);
+  entry.blocks.splice(index >= 0 ? index + 1 : entry.blocks.length, 0, block);
+  state.activeBlockId = block.id;
+  touchEntry(entry);
   render();
+  focusBlock(block.id);
+  return block;
 }
 
-async function deleteSegment(segmentId) {
-  const entry = activeEntry();
-  const segment = entry?.segments?.find((item) => item.id === segmentId);
-  if (!entry || !segment) return;
-  if (!confirm(`删除这段录音？${segment.duration ? `录音时长 ${segment.duration}` : ""}`)) return;
-
-  const segments = (entry.segments || []).filter((item) => item.id !== segmentId);
-  await updateActiveEntry({ segments });
+function createBlock(type, payload = {}) {
+  if (type === "date") return { id: uid("block"), type, date: payload.date || todayISO() };
+  if (type === "image") return { id: uid("block"), type, src: payload.src, caption: payload.caption || "" };
+  if (type === "audio") return { id: uid("block"), type, duration: "00:00", transcript: "", audioDataUrl: "", createdAt: nowISO() };
+  return { id: uid("block"), type: "text", text: payload.text || "" };
 }
 
-function bodyHtml() {
-  return el.bodyInput.innerHTML.trim();
-}
-
-function normalizeBodyHtml(value) {
-  try {
-    const raw = String(value || "");
-    if (!raw.trim()) return "";
-    const withDateChips = raw.replace(/&lt;date value="(\d{4}-\d{2}-\d{2})"&gt;.*?&lt;\/date&gt;|<date value="(\d{4}-\d{2}-\d{2})">.*?<\/date>/g, (_match, escapedDate, htmlDate) => dateChipHtml(escapedDate || htmlDate));
-    if (/<[a-z][\s\S]*>/i.test(withDateChips)) return cleanLegacyMarkdownHtml(withDateChips);
-    return withDateChips
-      .split(/\n{2,}/)
-      .map((paragraph) => blockFromPlainText(paragraph))
-      .join("");
-  } catch {
-    return fallbackBodyHtml(value);
-  }
-}
-
-function cleanLegacyMarkdownHtml(html) {
-  const template = document.createElement("template");
-  template.innerHTML = html;
-  template.content.querySelectorAll("p, div").forEach((node) => {
-    if (!node.parentNode) return;
-    if (node.classList.contains("craft-block")) return;
-    const text = node.textContent.trim();
-    if (!text) return;
-    const replacement = blockFromPlainText(text);
-    if (replacement !== `<p>${escapeHtml(text)}</p>`) {
-      replaceNodeWithHtml(node, replacement);
-    } else {
-      node.innerHTML = inlineMarkdownToHtml(text);
+function focusBlock(blockId) {
+  window.requestAnimationFrame(() => {
+    const text = el.blockList.querySelector(`[data-text-block="${blockId}"]`);
+    if (text) {
+      text.focus();
+      placeCaretAtEnd(text);
     }
   });
-  return template.innerHTML;
-}
-
-function replaceNodeWithHtml(node, html) {
-  if (!node.parentNode) return;
-  const template = document.createElement("template");
-  template.innerHTML = html;
-  node.replaceWith(...template.content.childNodes);
-}
-
-function fallbackBodyHtml(value) {
-  const text = String(value || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-  return text ? `<p>${escapeHtml(text)}</p>` : "";
-}
-
-function blockFromPlainText(text) {
-  const value = text.trim();
-  if (value.startsWith("## ")) return `<h2>${inlineMarkdownToHtml(value.slice(3))}</h2>`;
-  if (value.startsWith("> ")) return `<blockquote>${inlineMarkdownToHtml(value.slice(2))}</blockquote>`;
-  if (value.startsWith("- [ ] ")) return `<label class="todo-line"><input type="checkbox"> <span>${inlineMarkdownToHtml(value.slice(6))}</span></label>`;
-  if (value.startsWith("- ")) return `<ul><li>${inlineMarkdownToHtml(value.slice(2))}</li></ul>`;
-  return `<p>${inlineMarkdownToHtml(value).replace(/\n/g, "<br>")}</p>`;
-}
-
-function inlineMarkdownToHtml(text) {
-  return escapeHtml(text)
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*([^*]+)\*/g, "<em>$1</em>");
-}
-
-function saveBodyFromEditor() {
-  refreshDateChips();
-  updateActiveEntry({ body: bodyHtml() });
-}
-
-function handleEditorShortcuts() {
-  const text = el.bodyInput.textContent || "";
-  if (text.endsWith("/")) {
-    el.slashHelper.hidden = false;
-  } else {
-    el.slashHelper.hidden = true;
-  }
-
-  if (text.endsWith("===") && replaceTrailingEqualsWithBlock()) {
-    refreshDateChips();
-  }
-}
-
-function replaceTrailingEqualsWithBlock() {
-  const walker = document.createTreeWalker(el.bodyInput, 4);
-  const nodes = [];
-  let node = walker.nextNode();
-  while (node) {
-    nodes.push(node);
-    node = walker.nextNode();
-  }
-
-  for (let i = nodes.length - 1; i >= 0; i -= 1) {
-    const textNode = nodes[i];
-    if (!textNode.nodeValue.endsWith("===")) continue;
-    textNode.nodeValue = textNode.nodeValue.slice(0, -3);
-    const parent = textNode.parentElement || el.bodyInput;
-    const target = parent.closest(".caret-spacer") || parent;
-    target.insertAdjacentHTML("afterend", `<div class="craft-block"><br></div><p><br></p>`);
-    placeCaretAtEnd(el.bodyInput);
-    return true;
-  }
-  return false;
 }
 
 function placeCaretAtEnd(node) {
   const range = document.createRange();
-  const selection = window.getSelection();
   range.selectNodeContents(node);
   range.collapse(false);
+  const selection = window.getSelection();
   selection.removeAllRanges();
   selection.addRange(range);
 }
 
-function insertAtCursor(html, replaceSlash = false) {
-  el.bodyInput.focus();
-  if (replaceSlash) deletePreviousCharacter();
-  document.execCommand("insertHTML", false, html);
-  refreshDateChips();
-  saveBodyFromEditor();
-}
-
-function deletePreviousCharacter() {
-  deletePreviousCharacters(1);
-}
-
-function deletePreviousCharacters(count) {
-  const selection = window.getSelection();
-  if (!selection?.rangeCount) return;
-  for (let i = 0; i < count; i += 1) {
-    const range = selection.getRangeAt(0);
-    if (!range.collapsed) {
-      range.deleteContents();
-      return;
-    }
-    document.execCommand("delete", false);
-  }
-}
-
-function fixedDateMarkdown() {
+function updateBlock(blockId, patch) {
   const entry = activeEntry();
-  const date = entry?.date || todayISO();
-  return dateChipHtml(date);
+  const block = entry?.blocks.find((item) => item.id === blockId);
+  if (!entry || !block) return;
+  Object.assign(block, patch);
+  touchEntry(entry);
+  queueSave();
 }
 
-function dateChipHtml(date) {
-  return `<span class="date-chip" contenteditable="false" data-date="${date}" title="点按可删除日期">今天</span><span class="caret-spacer">&nbsp;</span>`;
+function deleteBlock(blockId) {
+  const entry = activeEntry();
+  if (!entry) return;
+  if (entry.blocks.length <= 1) return;
+  entry.blocks = entry.blocks.filter((block) => block.id !== blockId);
+  if (state.activeBlockId === blockId) state.activeBlockId = entry.blocks[0]?.id || null;
+  touchEntry(entry);
+  render();
+  queueSave();
 }
 
-function refreshDateChips() {
-  refreshDateChipsIn(el.bodyInput);
+function touchEntry(entry) {
+  entry.updatedAt = nowISO();
+  queueSave();
 }
 
-function refreshDateChipsIn(root) {
-  root.querySelectorAll(".date-chip[data-date]").forEach((chip) => {
-    const date = chip.dataset.date;
-    const isToday = date === todayISO();
-    chip.classList.toggle("past", !isToday);
-    chip.textContent = isToday ? "今天" : `${displayDate(date)} ${weekdayName(date)}`;
-  });
+function queueSave() {
+  window.clearTimeout(state.saveTimer);
+  el.saveStatus.textContent = "正在自动保存...";
+  state.saveTimer = window.setTimeout(saveActiveEntry, 260);
 }
 
-function deleteDateChip(chip) {
-  const spacer = chip.nextElementSibling?.classList.contains("caret-spacer") ? chip.nextElementSibling : null;
-  chip.remove();
-  spacer?.remove();
-  saveBodyFromEditor();
-}
-
-function applyMarkdown(action) {
-  const selected = editorSelectionText();
-  if (action === "date" || action === "divider") {
-    el.bodyInput.focus();
-    const snippets = {
-      date: fixedDateMarkdown(),
-      divider: `<div class="craft-block"><br></div><p><br></p>`
-    };
-    insertAtCursor(snippets[action] || "");
-    return;
-  }
-
-  if (!selected) {
-    el.recordHint.textContent = "先选中正文里的文字，再使用格式工具";
-    return;
-  }
-
-  if (action === "bold" || action === "italic") {
-    document.execCommand(action === "bold" ? "bold" : "italic", false);
-    saveBodyFromEditor();
-    return;
-  }
-
-  if (action === "heading") {
-    document.execCommand("formatBlock", false, "h2");
-    saveBodyFromEditor();
-    return;
-  }
-
-  if (action === "quote") {
-    document.execCommand("formatBlock", false, "blockquote");
-    saveBodyFromEditor();
-    return;
-  }
-
-  if (action === "list") {
-    document.execCommand("insertUnorderedList", false);
-    saveBodyFromEditor();
-    return;
-  }
-
-  const snippets = {
-    check: `<label class="todo-line"><input type="checkbox"> <span>${escapeHtml(selected)}</span></label>`
-  };
-  insertAtCursor(snippets[action] || "");
-}
-
-function editorSelectionText() {
-  const selection = window.getSelection();
-  if (!selection?.rangeCount || selection.isCollapsed) return "";
-  const range = selection.getRangeAt(0);
-  if (!el.bodyInput.contains(range.commonAncestorContainer)) return "";
-  return selection.toString().trim();
-}
-
-function updateToolbarVisibility() {
-  const selection = window.getSelection();
-  const selectionInEditor = Boolean(selection?.rangeCount && el.bodyInput.contains(selection.getRangeAt(0).commonAncestorContainer));
-  const focusInEditor = document.activeElement === el.bodyInput || el.bodyInput.contains(document.activeElement);
-  el.toolbar.hidden = !(focusInEditor || selectionInEditor);
-}
-
-function runSlashCommand(command) {
-  const map = {
-    date: fixedDateMarkdown(),
-    time: new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit" }).format(new Date()),
-    heading: "<h2><br></h2>",
-    todo: `<label class="todo-line"><input type="checkbox"> <span>待办</span></label>`,
-    audio: "<p>录音分段见下方</p>"
-  };
-  insertAtCursor(map[command] || "", true);
-  el.slashHelper.hidden = true;
+async function saveActiveEntry() {
+  const entry = activeEntry();
+  if (!entry) return;
+  await putEntry(entry);
+  state.entries = state.entries.map((item) => item.id === entry.id ? entry : item).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+  el.saveStatus.textContent = `已自动保存 ${formatTime(new Date())}`;
+  renderEntries();
 }
 
 function setupSpeechRecognition() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
-    el.speechStatus.textContent = "当前浏览器不支持实时转写，可保存录音";
+    el.speechStatus.textContent = "浏览器不支持实时转写";
     return null;
   }
-
   const recognition = new SpeechRecognition();
   recognition.lang = "zh-CN";
   recognition.continuous = true;
   recognition.interimResults = true;
   recognition.onresult = (event) => {
-    let interim = "";
-    for (let i = event.resultIndex; i < event.results.length; i += 1) {
-      const text = event.results[i][0].transcript.trim();
-      if (event.results[i].isFinal) {
-        state.liveTranscript += `${text}\n`;
-        updateLiveTranscript();
-        appendTranscriptToBody(text);
-      } else {
-        interim = text;
-      }
+    let text = "";
+    for (let index = 0; index < event.results.length; index += 1) {
+      text += event.results[index][0].transcript;
     }
-    el.recordHint.textContent = interim ? "正在转写草稿" : "正在监听中文语音";
-    updateLiveTranscript(interim);
+    state.liveTranscript = text.trim();
+    el.liveTranscript.textContent = state.liveTranscript || "正在听...";
+    if (state.recordingBlockId) updateBlock(state.recordingBlockId, { transcript: state.liveTranscript });
+    renderAudioDock();
   };
   recognition.onerror = () => {
-    el.recordHint.textContent = "转写中断，录音仍会保存";
+    el.speechStatus.textContent = "实时转写中断，录音仍会保存";
   };
-  recognition.onend = () => {
-    if (!state.stopRequested && state.recorder?.state === "recording") {
-      try {
-        recognition.start();
-      } catch {
-        el.recordHint.textContent = "转写暂不可用，录音继续";
-      }
-    }
-  };
-  el.speechStatus.textContent = "支持中文实时转写";
   return recognition;
-}
-
-function appendTranscriptToBody(text) {
-  const entry = activeEntry();
-  if (!entry || !text) return;
-  const prefix = entry.body.trim() ? "" : "";
-  const nextBody = `${normalizeBodyHtml(entry.body)}${prefix}<p>${escapeHtml(text)}</p>`;
-  entry.body = nextBody;
-  el.bodyInput.innerHTML = nextBody;
-  refreshDateChips();
-  updateActiveEntry({ body: nextBody });
-}
-
-function appendHtmlToBody(html) {
-  const entry = activeEntry();
-  if (!entry || !html) return;
-  const nextBody = `${normalizeBodyHtml(entry.body)}${html}`;
-  entry.body = nextBody;
-  el.bodyInput.innerHTML = nextBody;
-  refreshDateChips();
-  updateActiveEntry({ body: nextBody });
-}
-
-async function transcribeSegment(segmentId) {
-  const entry = activeEntry();
-  const segment = entry?.segments?.find((item) => item.id === segmentId);
-  const audio = await segmentAudioBlob(segment);
-  if (!entry || !audio) return;
-
-  const endpoint = getTranscribeEndpoint();
-  if (!endpoint) return;
-
-  await replaceSegment(segmentId, { transcriptionStatus: "running" });
-  try {
-    const audioBase64 = await blobToBase64(audio);
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        audioBase64,
-        mimeType: audio.type || segment.audioMimeType || "audio/webm",
-        filename: `${entry.date}-${segmentId}.webm`,
-        language: "zh"
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error(await responseErrorMessage(response));
-    }
-
-    const result = await response.json();
-    const text = String(result.text || "").trim();
-    if (!text) throw new Error("转写服务没有返回文本");
-
-    await replaceSegment(segmentId, {
-      text,
-      transcriptSource: "cloud",
-      transcriptionStatus: "done",
-      transcribedAt: new Date().toISOString()
-    });
-    appendHtmlToBody(`<h3>准确转写 · ${escapeHtml(segment.duration || "00:00")}</h3><p>${escapeHtml(text)}</p>`);
-  } catch (error) {
-    const message = readableTranscribeError(error);
-    await replaceSegment(segmentId, {
-      transcriptionStatus: "error",
-      transcriptionError: message
-    });
-    if (confirm(`${message}\n\n要重新填写准确转写服务地址吗？`)) {
-      resetTranscribeEndpoint();
-    }
-  }
-}
-
-function getTranscribeEndpoint() {
-  const saved = normalizeEndpoint(localStorage.getItem(TRANSCRIBE_ENDPOINT_KEY));
-  if (saved) return saved;
-  localStorage.removeItem(TRANSCRIBE_ENDPOINT_KEY);
-
-  const sameOriginEndpoint = `${window.location.origin}/api/transcribe`;
-  if (!window.location.hostname.endsWith("github.io")) return sameOriginEndpoint;
-
-  localStorage.setItem(TRANSCRIBE_ENDPOINT_KEY, DEFAULT_TRANSCRIBE_ENDPOINT);
-  return DEFAULT_TRANSCRIBE_ENDPOINT;
-}
-
-function resetTranscribeEndpoint() {
-  const endpoint = prompt("粘贴准确转写服务地址", getTranscribeEndpoint());
-  const normalized = normalizeEndpoint(endpoint);
-  if (!normalized) {
-    alert("地址需要是 https 开头，并且以 /api/transcribe 结尾。");
-    return;
-  }
-  localStorage.setItem(TRANSCRIBE_ENDPOINT_KEY, normalized);
-}
-
-function normalizeEndpoint(value) {
-  const endpoint = String(value || "").trim();
-  if (!endpoint) return "";
-  try {
-    const url = new URL(endpoint);
-    if (url.protocol !== "https:") return "";
-    if (!url.pathname.endsWith("/api/transcribe")) return "";
-    return url.toString();
-  } catch {
-    return "";
-  }
-}
-
-function readableTranscribeError(error) {
-  const message = String(error?.message || "");
-  if (message === "Failed to fetch" || message.includes("NetworkError")) {
-    return "准确转写服务连接失败。请检查接口地址、网络、浏览器插件，或稍后重试。";
-  }
-  return message || "准确转写失败，请稍后重试。";
-}
-
-async function responseErrorMessage(response) {
-  try {
-    const result = await response.json();
-    if (result?.error) return result.error;
-  } catch {
-    try {
-      const text = await response.text();
-      if (text) return text;
-    } catch {
-      // Keep the generic status fallback below.
-    }
-  }
-  return `转写失败：${response.status}`;
-}
-
-async function segmentAudioBlob(segment) {
-  if (segment?.audio instanceof Blob && segment.audio.size > 0) return segment.audio;
-  if (!segment?.audioDataUrl) return null;
-  const response = await fetch(segment.audioDataUrl);
-  return response.blob();
-}
-
-function blobToBase64(blob) {
-  return blobToDataUrl(blob).then((value) => (
-    value.includes(",") ? value.split(",").pop() : value
-  ));
-}
-
-function blobToDataUrl(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(blob);
-  });
-}
-
-function updateLiveTranscript(interim = "") {
-  const finalText = state.liveTranscript.trim();
-  const parts = [];
-  if (finalText) parts.push(finalText);
-  if (interim) parts.push(`…${interim}`);
-  el.liveTranscriptText.textContent = parts.join("\n") || "正在听，请继续说。";
 }
 
 async function toggleRecording() {
@@ -888,96 +434,67 @@ async function toggleRecording() {
 }
 
 async function startRecording() {
-  const entry = activeEntry();
-  if (!entry) return;
-  state.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  const block = insertBlock("audio");
+  state.recordingBlockId = block.id;
   state.chunks = [];
-  state.segmentChunks = [];
   state.liveTranscript = "";
-  el.liveTranscriptText.textContent = "正在听，请继续说。";
-  state.stopRequested = false;
   state.recordingStartedAt = Date.now();
-  state.segmentStartedAt = Date.now();
+  state.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
   const mimeType = pickMimeType();
-  state.recorder = mimeType
-    ? new MediaRecorder(state.mediaStream, { mimeType })
-    : new MediaRecorder(state.mediaStream);
+  state.recorder = new MediaRecorder(state.mediaStream, mimeType ? { mimeType } : undefined);
   state.recorder.ondataavailable = (event) => {
-    if (event.data.size > 0) {
-      state.chunks.push(event.data);
-      state.segmentChunks.push(event.data);
-    }
+    if (event.data?.size) state.chunks.push(event.data);
   };
-  state.recorder.onstop = saveRecordingSegment;
-  state.recorder.onerror = () => {
-    stopRecording("录音被浏览器中断，已尝试保存已有片段");
-  };
-  state.mediaStream.getAudioTracks().forEach((track) => {
-    track.onended = () => {
-      if (state.recorder?.state === "recording") {
-        stopRecording("麦克风已被系统停止，已保存已有录音");
-      } else {
-        resetRecordingUi("麦克风已被系统停止");
-      }
-    };
-  });
-  state.recorder.start(1000);
-
-  if (state.recognition) {
-    try {
-      state.recognition.start();
-    } catch {
-      el.recordHint.textContent = "转写启动失败，录音会正常保存";
-    }
+  state.recorder.onstop = finishRecording;
+  state.recorder.start(500);
+  try {
+    state.recognition?.start();
+  } catch {
+    // Recognition can throw when already started; recording should continue.
   }
-
   el.recordBtn.classList.add("recording");
-  el.recordLabel.textContent = "停止录音";
-  el.recordHint.textContent = "正在录音并实时转写";
-  updateLiveTranscript();
+  el.recordBtn.textContent = "停止录音";
+  el.speechStatus.textContent = "正在录音";
+  el.liveTranscript.textContent = "正在听...";
   state.timerId = window.setInterval(() => {
-    el.recordTimer.textContent = formatTimer(Date.now() - state.recordingStartedAt);
-  }, 250);
+    const blockEl = el.blockList.querySelector(`[data-block="${state.recordingBlockId}"] .recording-chip`);
+    if (blockEl) blockEl.textContent = `正在录音 ${currentRecordingDuration()}`;
+  }, 500);
 }
 
-function stopRecording(message = "录音和转写已保存到当前日记") {
-  state.stopRequested = true;
+function stopRecording() {
+  if (state.recorder?.state === "recording") state.recorder.stop();
+}
+
+async function finishRecording() {
+  window.clearInterval(state.timerId);
   try {
     state.recognition?.stop();
   } catch {
-    el.recordHint.textContent = "转写停止失败，正在保存录音";
+    // Ignore speech API stop races.
   }
-
-  try {
-    if (state.recorder?.state === "recording") {
-      try {
-        state.recorder.requestData();
-      } catch {
-        el.recordHint.textContent = "正在停止录音";
-      }
-      state.recorder.stop();
-    } else {
-      saveRecordingSegment();
-    }
-  } catch {
-    saveRecordingSegment();
-  } finally {
-    state.mediaStream?.getTracks().forEach((track) => {
-      track.onended = null;
-      if (track.readyState !== "ended") track.stop();
-    });
-    state.mediaStream = null;
-    resetRecordingUi(message);
-  }
-}
-
-function resetRecordingUi(message) {
-  window.clearInterval(state.timerId);
-  state.timerId = null;
+  state.mediaStream?.getTracks().forEach((track) => track.stop());
+  const duration = formatDuration(Date.now() - state.recordingStartedAt);
+  const mimeType = state.chunks[0]?.type || "audio/webm";
+  const blob = new Blob(state.chunks, { type: mimeType });
+  const audioDataUrl = blob.size ? await blobToDataUrl(blob) : "";
+  updateBlock(state.recordingBlockId, {
+    audioDataUrl,
+    duration,
+    transcript: state.liveTranscript || "",
+    createdAt: nowISO()
+  });
+  state.recorder = null;
+  state.mediaStream = null;
+  state.recordingBlockId = null;
+  state.chunks = [];
+  state.recordingStartedAt = 0;
   el.recordBtn.classList.remove("recording");
-  el.recordLabel.textContent = "开始录音";
-  el.recordTimer.textContent = "00:00";
-  el.recordHint.textContent = message;
+  el.recordBtn.textContent = "🎙 开始说话";
+  el.speechStatus.textContent = "准备就绪";
+  el.liveTranscript.textContent = state.liveTranscript || "录音已保存。";
+  render();
+  await saveActiveEntry();
 }
 
 function pickMimeType() {
@@ -985,102 +502,36 @@ function pickMimeType() {
   return types.find((type) => MediaRecorder.isTypeSupported(type)) || "";
 }
 
-async function saveRecordingSegment() {
-  const entry = activeEntry();
-  if (!entry || !state.segmentChunks.length) return;
-  const mimeType = state.segmentChunks[0]?.type || "audio/webm";
-  const audio = new Blob(state.segmentChunks, { type: mimeType });
-  if (!audio.size) return;
-  const audioDataUrl = await blobToDataUrl(audio);
-  const duration = formatTimer(Date.now() - state.segmentStartedAt);
-  const text = state.liveTranscript.trim();
-  const segment = {
-    id: uid("segment"),
-    audio,
-    audioDataUrl,
-    audioMimeType: mimeType,
-    audioSize: audio.size,
-    text,
-    duration,
-    createdAt: new Date().toISOString()
-  };
-  await updateActiveEntry({ segments: [...(entry.segments || []), segment] });
-  state.segmentChunks = [];
-  state.liveTranscript = "";
-  el.liveTranscriptText.textContent = text || "这一段没有拿到可用的实时转写。录音已保存，可回听。";
-  el.recordHint.textContent = "录音和转写已保存到当前日记";
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
 }
 
-function saveCurrentSegmentWhileRecording() {
-  if (state.recorder?.state !== "recording") return;
-  state.recorder.requestData();
-  window.setTimeout(async () => {
-    const text = state.liveTranscript.trim();
-    await saveRecordingSegment();
-    if (text) {
-      appendHtmlToBody(`<h3>分段 ${formatTimer(Date.now() - state.recordingStartedAt)}</h3><p>${escapeHtml(text)}</p>`);
-    }
-    state.liveTranscript = "";
-    state.segmentStartedAt = Date.now();
-    el.liveTranscriptText.textContent = "新分段已开始，继续说即可。";
-    el.recordHint.textContent = "已保存一个独立分段，继续录音";
-  }, 80);
+async function handleImageFile(file) {
+  if (!file) return;
+  const src = await blobToDataUrl(file);
+  insertBlock("image", { src, caption: file.name });
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 function bindEvents() {
-  el.addFolderBtn.addEventListener("click", async () => {
-    const name = prompt("文件夹名称");
-    if (!name?.trim()) return;
-    const folder = { id: uid("folder"), name: name.trim() };
-    await put("folders", folder);
-    state.folders.push(folder);
-    state.activeFolderId = folder.id;
-    render();
-  });
-
-  el.folderList.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-folder-id]");
-    if (!button) return;
-    state.activeFolderId = button.dataset.folderId;
-    render();
-  });
-
   el.newEntryBtn.addEventListener("click", async () => {
-    const entry = createEntry();
-    await put("entries", entry);
+    const entry = createEntry(state.activeFolderId === "all" ? "daily" : state.activeFolderId);
     state.entries.unshift(entry);
     state.activeEntryId = entry.id;
-    state.activeView = "record";
-    render();
-    el.titleInput.focus();
-  });
-
-  el.reviewTabBtn.addEventListener("click", () => {
-    state.activeView = "review";
-    state.reviewEntryId ||= state.entries[0]?.id || null;
-    render();
-    el.searchInput.focus();
-  });
-
-  el.entryList.addEventListener("click", (event) => {
-    const deleteButton = event.target.closest("[data-delete-entry]");
-    if (deleteButton) {
-      deleteActiveEntry(deleteButton.dataset.deleteEntry);
-      return;
-    }
-
-    const openButton = event.target.closest("[data-open-entry]");
-    if (!openButton) return;
-    state.reviewEntryId = openButton.dataset.openEntry;
-    renderEntries();
-    renderReviewDetail();
-  });
-
-  el.reviewDetail.addEventListener("click", (event) => {
-    const editButton = event.target.closest("[data-edit-review-entry]");
-    if (!editButton) return;
-    state.activeEntryId = editButton.dataset.editReviewEntry;
-    state.activeView = "record";
+    await putEntry(entry);
     render();
     el.titleInput.focus();
   });
@@ -1088,84 +539,86 @@ function bindEvents() {
   el.searchInput.addEventListener("input", () => {
     state.search = el.searchInput.value;
     renderEntries();
-    renderReviewDetail();
   });
 
-  el.titleInput.addEventListener("input", () => updateActiveEntry({ title: el.titleInput.value }));
-  el.bodyInput.addEventListener("input", () => {
-    handleEditorShortcuts();
-    saveBodyFromEditor();
-    updateToolbarVisibility();
-  });
-  el.bodyInput.addEventListener("keyup", () => {
-    handleEditorShortcuts();
-    saveBodyFromEditor();
-    updateToolbarVisibility();
-  });
-  el.bodyInput.addEventListener("focus", updateToolbarVisibility);
-  el.bodyInput.addEventListener("mouseup", updateToolbarVisibility);
-  document.addEventListener("selectionchange", updateToolbarVisibility);
-  document.addEventListener("pointerdown", (event) => {
-    if (event.target.closest(".toolbar") || event.target.closest("#bodyInput")) return;
-    window.setTimeout(updateToolbarVisibility, 80);
-  });
-  el.bodyInput.addEventListener("click", (event) => {
-    const chip = event.target.closest(".date-chip[data-date]");
-    if (!chip) return;
-    if (confirm("删除这个日期块吗？")) deleteDateChip(chip);
-  });
-  el.entryDateInput.addEventListener("change", () => updateActiveEntry({ date: el.entryDateInput.value }));
-  el.entryFolderSelect.addEventListener("change", () => updateActiveEntry({ folderId: el.entryFolderSelect.value }));
-  el.publishEntryBtn.addEventListener("click", async () => {
-    await updateActiveEntry({ body: bodyHtml() });
-    state.reviewEntryId = state.activeEntryId;
-    state.activeView = "review";
+  el.folderNav.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-folder]");
+    if (!button) return;
+    state.activeFolderId = button.dataset.folder;
     render();
   });
 
-  el.toolbar.addEventListener("pointerdown", (event) => {
-    event.preventDefault();
-  });
-  el.toolbar.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-md]");
-    if (button) applyMarkdown(button.dataset.md);
-  });
-
-  el.slashHelper.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-command]");
-    if (button) runSlashCommand(button.dataset.command);
+  el.entryList.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-entry]");
+    if (!button) return;
+    state.activeEntryId = button.dataset.entry;
+    render();
   });
 
-  el.recordBtn.addEventListener("click", () => {
-    toggleRecording().catch(() => {
-      el.recordHint.textContent = "无法访问麦克风，请检查浏览器权限";
-    });
+  el.titleInput.addEventListener("input", () => {
+    const entry = activeEntry();
+    entry.title = el.titleInput.value;
+    touchEntry(entry);
   });
 
-  el.saveSegmentBtn.addEventListener("click", saveCurrentSegmentWhileRecording);
+  el.subtitleInput.addEventListener("input", () => {
+    const entry = activeEntry();
+    entry.subtitle = el.subtitleInput.value;
+    touchEntry(entry);
+  });
 
-  el.segments.addEventListener("click", (event) => {
-    const deleteButton = event.target.closest("[data-delete-segment]");
-    if (deleteButton) {
-      deleteSegment(deleteButton.dataset.deleteSegment);
+  el.blockList.addEventListener("focusin", (event) => {
+    const block = event.target.closest("[data-block]");
+    if (block) setActiveBlock(block.dataset.block);
+  });
+
+  el.blockList.addEventListener("input", (event) => {
+    const textBlock = event.target.closest("[data-text-block]");
+    if (textBlock) updateBlock(textBlock.dataset.textBlock, { text: textBlock.textContent });
+    const caption = event.target.closest("[data-caption]");
+    if (caption) updateBlock(caption.dataset.caption, { caption: caption.textContent });
+  });
+
+  el.blockList.addEventListener("click", (event) => {
+    const block = event.target.closest("[data-block]");
+    if (block) setActiveBlock(block.dataset.block);
+    const deleteButton = event.target.closest("[data-delete-block]");
+    if (!deleteButton) return;
+    if (confirm("删除这个块吗？")) deleteBlock(deleteButton.dataset.deleteBlock);
+  });
+
+  document.querySelector(".floating-toolbar").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-insert]");
+    if (!button) return;
+    const type = button.dataset.insert;
+    if (type === "image") {
+      el.imagePicker.click();
       return;
     }
-
-    const button = event.target.closest("[data-append-segment]");
-    if (!button) return;
-    const entry = activeEntry();
-    const segment = entry?.segments?.find((item) => item.id === button.dataset.appendSegment);
-    if (segment?.text) insertAtCursor(`<p>${escapeHtml(segment.text)}</p>`);
+    if (type === "audio") {
+      startRecording().catch(() => {
+        el.speechStatus.textContent = "无法访问麦克风，请检查权限";
+      });
+      return;
+    }
+    insertBlock(type);
   });
 
-  el.copyTranscriptBtn.addEventListener("click", async () => {
-    const text = (activeEntry()?.segments || [])
-      .slice()
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-      .map((segment) => segment.text)
-      .filter(Boolean)
-      .join("\n\n");
-    if (text) await navigator.clipboard.writeText(text);
+  el.insertDateTopBtn.addEventListener("click", () => insertBlock("date"));
+  el.imagePicker.addEventListener("change", () => handleImageFile(el.imagePicker.files[0]));
+  el.recordBtn.addEventListener("click", () => toggleRecording().catch(() => {
+    el.speechStatus.textContent = "无法访问麦克风，请检查权限";
+  }));
+  el.closeHintBtn?.addEventListener("click", () => el.closeHintBtn.closest(".hint-card").hidden = true);
+  el.closeDockBtn?.addEventListener("click", () => document.querySelector(".record-dock").hidden = true);
+
+  document.addEventListener("keydown", (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "r") {
+      event.preventDefault();
+      toggleRecording().catch(() => {
+        el.speechStatus.textContent = "无法访问麦克风，请检查权限";
+      });
+    }
   });
 }
 
@@ -1178,23 +631,12 @@ async function init() {
   registerServiceWorker();
 }
 
-init().catch((error) => {
-  console.error(error);
-  el.speechStatus.textContent = `初始化失败：${error.message || "请刷新重试"}`;
-});
-
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  let refreshing = false;
-  navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (refreshing) return;
-    refreshing = true;
-    window.location.reload();
-  });
-
-  navigator.serviceWorker.register("./sw.js?v=20")
-    .then((registration) => registration.update())
-    .catch(() => {
-      el.speechStatus.textContent = "离线缓存暂不可用，其他功能正常";
-    });
+  navigator.serviceWorker.register("./sw.js?v=21").then((registration) => registration.update()).catch(() => {});
 }
+
+init().catch((error) => {
+  console.error(error);
+  el.saveStatus.textContent = `初始化失败：${error.message || "请刷新重试"}`;
+});

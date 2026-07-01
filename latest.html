@@ -3,134 +3,115 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#a7d7bd" />
+    <meta name="theme-color" content="#9fdbbe" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Voice Journal" />
     <title>Voice Journal</title>
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="icon.svg" />
-    <link rel="stylesheet" href="styles.css?v=layout-v10" />
+    <link rel="stylesheet" href="styles.css?v=craft-v1" />
   </head>
   <body>
     <div class="app-shell">
-      <header class="app-header">
+      <aside class="guide-rail" aria-label="设计说明">
+        <div class="guide-item"><b>1</b><span>顶部工具栏<br />简洁操作，不打扰写作</span></div>
+        <div class="guide-item"><b>2</b><span>日记导航<br />按日期和主题回看</span></div>
+        <div class="guide-item"><b>3</b><span>内容编辑区<br />文字、图片和声音混排</span></div>
+        <div class="guide-item"><b>4</b><span>录音工作台<br />插入声音片段块</span></div>
+      </aside>
+
+      <aside class="sidebar">
+        <div class="window-dots" aria-hidden="true"><span></span><span></span><span></span></div>
         <div class="brand-row">
           <div class="brand-mark">VJ</div>
           <div>
             <h1>Voice Journal</h1>
-            <p id="speechStatus">正在检测转写能力</p>
+            <p id="saveStatus">正在载入...</p>
           </div>
         </div>
-      </header>
 
-      <main class="app-main">
-        <article class="editor-surface" data-view-panel="record">
-            <div class="editor-header">
-              <input id="titleInput" class="title-input" placeholder="给今天起个标题" />
-              <div class="editor-meta">
-                <input id="entryDateInput" type="date" />
-                <select id="entryFolderSelect" aria-label="移动到文件夹"></select>
-                <button class="secondary-action save-entry-action" id="publishEntryBtn" type="button">保存日记</button>
-              </div>
-            </div>
+        <button class="new-entry-button" id="newEntryBtn" type="button">＋ 新建日记</button>
+        <label class="search-box">
+          <span>⌕</span>
+          <input id="searchInput" type="search" placeholder="搜索日记" />
+        </label>
 
-            <div class="recorder-strip">
-              <div class="recorder-main">
-                <button class="record-button" id="recordBtn" type="button">
-                  <span class="record-dot"></span>
-                  <span id="recordLabel">开始录音</span>
-                </button>
-                <div class="record-stats">
-                  <strong id="recordTimer">00:00</strong>
-                  <span id="recordHint">录音会保存在当前日记里</span>
-                </div>
-              </div>
-              <button class="secondary-action" id="saveSegmentBtn" type="button">保存当前分段</button>
-              <div class="live-transcript" id="liveTranscriptBox">
-                <span class="live-label">实时转写草稿</span>
-                <p id="liveTranscriptText">开始录音后，这里会显示浏览器实时识别到的中文。</p>
-              </div>
-            </div>
+        <nav class="folder-nav" id="folderNav" aria-label="日记分类"></nav>
 
-            <div class="toolbar" aria-label="Markdown 工具栏" hidden>
-              <button type="button" data-md="bold" title="加粗">B</button>
-              <button type="button" data-md="italic" title="斜体"><i>I</i></button>
-              <button type="button" data-md="heading" title="标题">H</button>
-              <button type="button" data-md="quote" title="引用">"</button>
-              <button type="button" data-md="list" title="列表">•</button>
-              <button type="button" data-md="check" title="待办">☐</button>
-              <button type="button" data-md="date" title="固定日期">今天</button>
-              <button type="button" data-md="divider" title="分隔线">---</button>
-            </div>
+        <section class="recent-section">
+          <h2>最近打开</h2>
+          <div class="entry-list" id="entryList"></div>
+        </section>
 
-            <div class="slash-helper" id="slashHelper" hidden>
-              <button type="button" data-command="date">今天 - 插入固定日期</button>
-              <button type="button" data-command="time">现在 - 插入当前时间</button>
-              <button type="button" data-command="heading">标题 - 新段落标题</button>
-              <button type="button" data-command="todo">待办 - 复选项</button>
-              <button type="button" data-command="audio">录音 - 插入录音索引</button>
-            </div>
+        <div class="hint-card">
+          <button id="closeHintBtn" type="button">×</button>
+          <strong>提示</strong>
+          <span>用下方工具条插入内容块，录音会保存在当前位置。</span>
+        </div>
+      </aside>
 
-            <div
-              id="bodyInput"
-              class="body-input"
-              contenteditable="true"
-              role="textbox"
-              aria-multiline="true"
-              data-placeholder="输入 / 呼出日期块；输入 === 生成白色方块。录音转写会自动追加到这里。"
-            ></div>
+      <main class="main-stage">
+        <div class="cover">
+          <div class="cover-actions">
+            <button type="button">分享</button>
+            <button type="button">格式</button>
+            <button type="button">···</button>
+          </div>
+          <p>听见生活，记录此刻</p>
+        </div>
 
-            <section class="transcript-panel">
-              <div class="section-heading">
-                <span>录音与转写分段</span>
-                <button class="text-button" id="copyTranscriptBtn" type="button">复制转写</button>
-              </div>
-              <div class="segments" id="segments"></div>
-            </section>
+        <article class="paper">
+          <div class="doc-meta">
+            <button class="date-pill" id="insertDateTopBtn" type="button">▦ 今天</button>
+          </div>
+          <input class="doc-title" id="titleInput" placeholder="今天的标题" />
+          <input class="doc-subtitle" id="subtitleInput" placeholder="写下今天的感受..." />
+          <div class="block-list" id="blockList"></div>
         </article>
 
-        <section class="review-surface" data-view-panel="review" aria-label="回看日记" hidden>
-          <div class="review-header">
-            <div>
-              <h2>回看</h2>
-              <p>搜索、筛选和打开已经记录的日记</p>
-            </div>
-            <button class="icon-button" id="addFolderBtn" type="button" title="新建文件夹">+</button>
-          </div>
-
-          <div class="search-wrap">
-            <input id="searchInput" type="search" placeholder="搜索标题、正文、转写..." />
-          </div>
-
-          <div class="folder-list" id="folderList"></div>
-
-          <div class="entry-list-wrap" aria-label="日记列表">
-            <div class="section-heading">
-              <span id="currentFolderName">全部日记</span>
-              <span class="muted-count" id="entryCount">0</span>
-            </div>
-            <div class="entry-list" id="entryList"></div>
-          </div>
-
-          <article class="review-detail" id="reviewDetail">
-            <div class="empty-state">点一篇日记，在这里查看内容。</div>
-          </article>
-        </section>
+        <div class="floating-toolbar" aria-label="插入块">
+          <button type="button" data-insert="text">＋</button>
+          <button type="button" data-insert="text">T</button>
+          <button type="button" data-insert="image">▧</button>
+          <button type="button" data-insert="audio">🎙</button>
+          <button type="button" data-insert="date">▦</button>
+        </div>
       </main>
 
-      <nav class="bottom-tabs" aria-label="主要入口">
-        <button class="tab-button active" id="newEntryBtn" type="button">
-          <span>＋</span>
-          <strong>新建</strong>
-        </button>
-        <button class="tab-button" id="reviewTabBtn" type="button">
-          <span>⌕</span>
-          <strong>回看</strong>
-        </button>
-      </nav>
+      <aside class="record-dock">
+        <div class="dock-tabs">
+          <button class="active" type="button">录音</button>
+          <button type="button">块导航</button>
+          <button id="closeDockBtn" type="button">×</button>
+        </div>
+
+        <section class="dock-section">
+          <h2>插入录音块</h2>
+          <p>在光标位置插入新的声音记录，录完会保留播放器、时长和实时转写。</p>
+          <button class="record-cta" id="recordBtn" type="button">🎙 开始说话</button>
+          <span class="shortcut">快捷键 ⌘ R</span>
+        </section>
+
+        <section class="dock-section">
+          <div class="dock-heading">
+            <h2>实时转写</h2>
+            <span id="speechStatus">准备就绪</span>
+          </div>
+          <div class="live-box" id="liveTranscript">开始录音后，文字会实时显示在这里。</div>
+        </section>
+
+        <section class="dock-section">
+          <div class="dock-heading">
+            <h2>声音片段</h2>
+            <span id="audioCount">0</span>
+          </div>
+          <div class="audio-mini-list" id="audioMiniList"></div>
+        </section>
+      </aside>
     </div>
 
-    <script src="app.js?v=layout-v10"></script>
+    <input id="imagePicker" type="file" accept="image/*" hidden />
+    <script src="app.js?v=craft-v1"></script>
   </body>
 </html>
