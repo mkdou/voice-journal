@@ -1164,9 +1164,9 @@ body.editing .mobile-tabbar {
   }
 
   .editor-toolbar {
-    opacity: 0;
-    pointer-events: none;
-    transform: translateY(22px);
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
   }
 
   body.editing .editor-toolbar {

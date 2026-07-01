@@ -525,6 +525,7 @@ function renderEditor() {
   const background = coverBackground(entry);
   document.documentElement.style.setProperty("--journal-bg", background);
   el.coverArea.style.backgroundImage = background;
+  el.insertDateTopBtn.innerHTML = `${icon("calendar")} ${escapeHtml(displayDate(entry.date || todayISO()))}`;
   el.blockList.innerHTML = entry.blocks.map(renderBlock).join("");
   attachAudioListeners();
   hydrateIcons(el.blockList);
@@ -1552,7 +1553,9 @@ function bindEvents() {
   });
 
   el.insertDateTopBtn.addEventListener("click", () => {
-    const block = insertBlock("date");
+    const entry = activeEntry();
+    let block = entry?.blocks.find((item) => item.type === "date");
+    if (!block) block = insertBlock("date");
     openDateSheet(block?.id);
   });
   document.querySelectorAll("[data-mobile-tab]").forEach((button) => {
@@ -1612,12 +1615,14 @@ function bindEvents() {
     if (button) applyCoverChoice(button.dataset.coverChoice);
   });
   let sheetStartY = 0;
-  el.insertSheet.addEventListener("touchstart", (event) => {
-    sheetStartY = event.touches[0].clientY;
-  }, { passive: true });
-  el.insertSheet.addEventListener("touchend", (event) => {
-    if (event.changedTouches[0].clientY - sheetStartY > 70) closeInsertSheet();
-  }, { passive: true });
+  document.querySelectorAll(".insert-sheet").forEach((sheet) => {
+    sheet.addEventListener("touchstart", (event) => {
+      sheetStartY = event.touches[0].clientY;
+    }, { passive: true });
+    sheet.addEventListener("touchend", (event) => {
+      if (event.changedTouches[0].clientY - sheetStartY > 70) closeInsertSheet();
+    }, { passive: true });
+  });
   el.recordBtn.addEventListener("click", () => toggleRecording().catch(() => {
     el.speechStatus.textContent = "无法访问麦克风，请检查权限";
   }));
@@ -1669,7 +1674,7 @@ async function init() {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("./sw.js?v=28").then((registration) => registration.update()).catch(() => {});
+  navigator.serviceWorker.register("./sw.js?v=29").then((registration) => registration.update()).catch(() => {});
 }
 
 init().catch((error) => {
