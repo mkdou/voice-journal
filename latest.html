@@ -10,7 +10,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="icon.svg" />
-    <link rel="stylesheet" href="styles.css?v=craft-v11" />
+    <link rel="stylesheet" href="styles.css?v=craft-v12" />
   </head>
   <body>
     <div class="app-shell">
@@ -133,16 +133,12 @@
       </nav>
 
       <div class="sheet-backdrop" id="sheetBackdrop" hidden></div>
-      <section class="insert-sheet" id="insertSheet" hidden aria-label="插入块菜单">
+      <section class="insert-sheet" id="insertSheet" hidden aria-label="更多块菜单">
         <div class="sheet-handle"></div>
-        <h2>插入块</h2>
-        <button type="button" data-sheet-insert="date"><span data-icon="calendar"></span><strong>日期</strong><small>插入今天或指定日期</small></button>
-        <button type="button" data-sheet-insert="audio"><span data-icon="mic"></span><strong>录音</strong><small>插入声音片段</small></button>
-        <button type="button" data-sheet-insert="image"><span data-icon="image"></span><strong>图片</strong><small>上传图片</small></button>
-        <button type="button" data-sheet-insert="text"><span data-icon="text"></span><strong>文字</strong><small>普通文本</small></button>
-        <button type="button" data-sheet-insert="divider"><span data-icon="divider"></span><strong>分割线</strong><small>插入分割线</small></button>
-        <button type="button" data-sheet-insert="todo"><span data-icon="check"></span><strong>待办</strong><small>待办事项</small></button>
-        <button type="button" data-sheet-insert="quote"><span data-icon="quote"></span><strong>引用</strong><small>引用一段文字</small></button>
+        <h2>更多块</h2>
+        <button type="button" data-sheet-insert="divider"><span data-icon="divider"></span><strong>分割线</strong><small>分隔一天里的不同片段</small></button>
+        <button type="button" data-sheet-insert="todo"><span data-icon="check"></span><strong>待办</strong><small>记录要做的小事</small></button>
+        <button type="button" data-sheet-insert="quote"><span data-icon="quote"></span><strong>引用</strong><small>留下一句想记住的话</small></button>
       </section>
 
       <section class="insert-sheet option-sheet" id="dateSheet" hidden aria-label="选择日期">
@@ -175,6 +171,6 @@
     <input id="imagePicker" type="file" accept="image/*" hidden />
     <input id="coverPicker" type="file" accept="image/*" hidden />
     <input id="coverLibraryPicker" type="file" accept="image/*" multiple hidden />
-    <script src="app.js?v=craft-v11"></script>
+    <script src="app.js?v=craft-v12"></script>
   </body>
 </html>
