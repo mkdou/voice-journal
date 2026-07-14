@@ -50,6 +50,12 @@ const state = {
 
 const el = {
   saveStatus: document.querySelector("#saveStatus"),
+  homeGreeting: document.querySelector("#homeGreeting"),
+  homeRecordBtn: document.querySelector("#homeRecordBtn"),
+  homeSearchBtn: document.querySelector("#homeSearchBtn"),
+  homeRecentCards: document.querySelector("#homeRecentCards"),
+  homeMonthStats: document.querySelector("#homeMonthStats"),
+  homeTimeline: document.querySelector("#homeTimeline"),
   speechStatus: document.querySelector("#speechStatus"),
   newEntryBtn: document.querySelector("#newEntryBtn"),
   searchInput: document.querySelector("#searchInput"),
@@ -343,6 +349,18 @@ function createEntry(folderId = "daily") {
   };
 }
 
+async function ensureTodayEntry() {
+  let entry = state.entries
+    .filter((item) => item.date === todayISO())
+    .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))[0];
+  if (entry) return entry;
+  entry = createEntry("daily");
+  state.entries.unshift(entry);
+  state.activeEntryId = entry.id;
+  await putEntry(entry);
+  return entry;
+}
+
 function nextCoverFromLibrary() {
   if (!state.coverImages.length) return { src: "", preset: "forest" };
   const index = Number(localStorage.getItem("voiceJournalCoverRotation") || 0);
@@ -454,6 +472,7 @@ function blockText(block) {
 }
 
 function render() {
+  renderHome();
   renderFolders();
   renderEntries();
   renderEditor();
@@ -507,6 +526,116 @@ function entryStats(entry) {
   if (audio) parts.push(`${audio}段录音`);
   if (images) parts.push(`${images}张图片`);
   return parts.join(" · ") || displayDate(entry.date);
+}
+
+function audioBlocks(entry) {
+  return (entry.blocks || []).filter((block) => block.type === "audio");
+}
+
+function imageBlocks(entry) {
+  return (entry.blocks || []).filter((block) => block.type === "image");
+}
+
+function entryAudioMs(entry) {
+  return audioBlocks(entry).reduce((sum, block) => sum + (Number(block.durationMs) || durationTextToMs(block.duration)), 0);
+}
+
+function durationTextToMs(value = "") {
+  const parts = String(value).split(":").map((part) => Number(part));
+  if (parts.length !== 2 || parts.some(Number.isNaN)) return 0;
+  return ((parts[0] * 60) + parts[1]) * 1000;
+}
+
+function compactDuration(ms) {
+  const minutes = Math.round((ms || 0) / 60000);
+  if (minutes < 60) return `${Math.max(0, minutes)}分钟`;
+  const hours = Math.round((minutes / 60) * 10) / 10;
+  return `${hours}小时`;
+}
+
+function entryVisual(entry) {
+  const image = imageBlocks(entry)[0];
+  if (image?.src) return { type: "image", value: image.src, emoji: "" };
+  const text = `${displayEntryTitle(entry)} ${entry.blocks.map(blockText).join(" ")}`;
+  const rules = [
+    [/钢琴|练琴|琴/, ["🎹", "linear-gradient(135deg, #322d27 0%, #8f7a5d 52%, #f3dfb7 100%)"]],
+    [/植物|花|树|公园/, ["🌿", "linear-gradient(135deg, #dcefe3 0%, #7fbc91 52%, #f7f2da 100%)"]],
+    [/咖啡|拿铁|奶茶/, ["☕", "linear-gradient(135deg, #f4dfc7 0%, #b5875f 58%, #fff8e9 100%)"]],
+    [/深圳|城市|上班|通勤/, ["☁️", "linear-gradient(135deg, #d9eef8 0%, #7fb5d3 54%, #f5d7c8 100%)"]],
+    [/旅行|旅游|出发|酒店|机场/, ["🗺️", "linear-gradient(135deg, #e5f0de 0%, #9cc8b4 45%, #f0cfa5 100%)"]],
+    [/吃|饭|菜|酱牛肉|美食/, ["🍲", "linear-gradient(135deg, #fff1d9 0%, #d99a62 55%, #7d4632 100%)"]]
+  ];
+  const matched = rules.find(([pattern]) => pattern.test(text));
+  if (matched) return { type: "generated", emoji: matched[1][0], value: matched[1][1] };
+  const gradients = [
+    "linear-gradient(135deg, #e7f4ed 0%, #9fdbbe 52%, #fffdf8 100%)",
+    "linear-gradient(135deg, #f7eadf 0%, #d7bda4 52%, #fffefa 100%)",
+    "linear-gradient(135deg, #e8f1ef 0%, #b7d5cb 45%, #f3d6c6 100%)"
+  ];
+  return { type: "generated", emoji: "🌱", value: gradients[Math.abs(entry.id.length + (entry.title || "").length) % gradients.length] };
+}
+
+function visualStyle(visual) {
+  if (visual.type === "image") return `background-image: linear-gradient(180deg, rgba(0,0,0,.05), rgba(0,0,0,.45)), url("${visual.value}")`;
+  return `background-image: ${visual.value}`;
+}
+
+function renderHome() {
+  if (!el.homeRecentCards || !el.homeTimeline || !el.homeMonthStats) return;
+  const hour = new Date().getHours();
+  const greeting = hour < 11 ? "早上好" : hour < 18 ? "下午好" : "晚上好";
+  el.homeGreeting.textContent = `${greeting}，晓燕 ✨`;
+  const entries = [...state.entries].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+  el.homeRecentCards.innerHTML = entries.slice(0, 8).map((entry) => {
+    const visual = entryVisual(entry);
+    const audioCount = audioBlocks(entry).length;
+    return `
+      <button class="memory-card" type="button" data-entry-card="${entry.id}" style='${visualStyle(visual)}'>
+        ${visual.emoji ? `<span class="memory-emoji">${visual.emoji}</span>` : ""}
+        <span class="memory-title">${escapeHtml(displayEntryTitle(entry))}</span>
+        <span class="memory-meta">${audioCount}段录音 · ${compactDuration(entryAudioMs(entry))}</span>
+        <time>${escapeHtml(displayDate(entry.date))}</time>
+      </button>
+    `;
+  }).join("") || `<div class="empty-state">还没有记录。先留下今天的第一段声音。</div>`;
+
+  const month = todayISO().slice(0, 7);
+  const monthEntries = state.entries.filter((entry) => String(entry.date || "").startsWith(month));
+  const days = new Set(monthEntries.map((entry) => entry.date)).size;
+  const audios = monthEntries.reduce((sum, entry) => sum + audioBlocks(entry).length, 0);
+  const photos = monthEntries.reduce((sum, entry) => sum + imageBlocks(entry).length, 0);
+  const audioMs = monthEntries.reduce((sum, entry) => sum + entryAudioMs(entry), 0);
+  el.homeMonthStats.innerHTML = `
+    <div class="month-jar">🌿</div>
+    <div>
+      <h2>你在这个月留下了 🌱</h2>
+      <div class="month-grid">
+        <span><strong>${days}</strong><small>记录天数</small></span>
+        <span><strong>${audios}</strong><small>段声音</small></span>
+        <span><strong>${photos}</strong><small>张照片</small></span>
+        <span><strong>${Math.round((audioMs / 3600000) * 10) / 10}</strong><small>小时声音</small></span>
+      </div>
+      <p>每一次记录，都是生活送给未来自己的礼物。</p>
+    </div>
+  `;
+
+  el.homeTimeline.innerHTML = entries.slice(0, 12).map((entry) => {
+    const visual = entryVisual(entry);
+    const audioCount = audioBlocks(entry).length;
+    const images = imageBlocks(entry).length;
+    return `
+      <article class="timeline-item">
+        <div class="timeline-date"><b>${escapeHtml(displayDate(entry.date))}</b><small>${escapeHtml(new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric" }).format(new Date(`${entry.date}T00:00:00`)))}</small></div>
+        <button class="timeline-thumb" type="button" data-entry-card="${entry.id}" style='${visualStyle(visual)}'>${visual.emoji || ""}</button>
+        <button class="timeline-copy" type="button" data-entry-card="${entry.id}">
+          <strong>${escapeHtml(displayEntryTitle(entry))}</strong>
+          <span>🎙 ${audioCount}段 · 📷 ${images}张 · ⏱ ${compactDuration(entryAudioMs(entry))}</span>
+        </button>
+        <button class="timeline-play" type="button" data-play-entry="${entry.id}" aria-label="播放">${icon("play")}</button>
+      </article>
+    `;
+  }).join("") || `<div class="empty-state">时间轴会在你记录后出现。</div>`;
+  hydrateIcons(el.homeTimeline);
 }
 
 function coverBackground(entry) {
@@ -669,7 +798,8 @@ function renderMobileView() {
     page.classList.toggle("active", page.dataset.mobilePage === state.mobileTab);
   });
   document.querySelectorAll("[data-mobile-tab]").forEach((button) => {
-    button.classList.toggle("active", button.dataset.mobileTab === state.mobileTab);
+    const tab = button.dataset.mobileTab;
+    button.classList.toggle("active", tab === state.mobileTab || (state.mobileTab === "editor" && tab === "home"));
   });
 }
 
@@ -965,6 +1095,7 @@ async function saveActiveEntry() {
   await putEntry(entry);
   state.entries = state.entries.map((item) => item.id === entry.id ? entry : item).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
   el.saveStatus.textContent = `已自动保存 ${formatTime(new Date())}`;
+  renderHome();
   renderEntries();
 }
 
@@ -1482,15 +1613,57 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+function openEntryEditor(entryId) {
+  state.activeEntryId = entryId;
+  state.mobileTab = "editor";
+  render();
+}
+
+async function startHomeRecording() {
+  const entry = await ensureTodayEntry();
+  state.activeEntryId = entry.id;
+  state.mobileTab = "editor";
+  state.activeBlockId = entry.blocks[entry.blocks.length - 1]?.id || null;
+  render();
+  await startRecording();
+}
+
 function bindEvents() {
   el.newEntryBtn.addEventListener("click", async () => {
     const entry = createEntry(state.activeFolderId === "all" ? "daily" : state.activeFolderId);
     state.entries.unshift(entry);
     state.activeEntryId = entry.id;
     await putEntry(entry);
-    state.mobileTab = "today";
+    state.mobileTab = "editor";
     render();
     el.titleInput.focus();
+  });
+
+  el.homeRecordBtn?.addEventListener("click", () => {
+    startHomeRecording().catch(() => {
+      el.speechStatus.textContent = "无法访问麦克风，请检查权限";
+    });
+  });
+
+  el.homeSearchBtn?.addEventListener("click", () => {
+    state.mobileTab = "diary";
+    renderMobileView();
+    window.setTimeout(() => el.searchInput?.focus(), 60);
+  });
+
+  document.querySelector(".home-page")?.addEventListener("click", (event) => {
+    const entryCard = event.target.closest("[data-entry-card]");
+    if (entryCard) {
+      openEntryEditor(entryCard.dataset.entryCard);
+      return;
+    }
+    const playButton = event.target.closest("[data-play-entry]");
+    if (playButton) {
+      const entry = state.entries.find((item) => item.id === playButton.dataset.playEntry);
+      const firstAudio = audioBlocks(entry || {})[0];
+      openEntryEditor(playButton.dataset.playEntry);
+      if (firstAudio) window.setTimeout(() => toggleAudioPlayback(firstAudio.id), 160);
+    }
   });
 
   el.searchInput.addEventListener("input", () => {
@@ -1520,9 +1693,7 @@ function bindEvents() {
     }
     const button = event.target.closest("[data-entry]");
     if (!button) return;
-    state.activeEntryId = button.dataset.entry;
-    state.mobileTab = "today";
-    render();
+    openEntryEditor(button.dataset.entry);
   });
   let entryTouchX = 0;
   el.entryList.addEventListener("touchstart", (event) => {
@@ -1788,7 +1959,7 @@ async function init() {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("./sw.js?v=34").then((registration) => registration.update()).catch(() => {});
+  navigator.serviceWorker.register("./sw.js?v=35").then((registration) => registration.update()).catch(() => {});
 }
 
 init().catch((error) => {
