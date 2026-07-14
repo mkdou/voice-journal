@@ -10,7 +10,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="icon.svg" />
-    <link rel="stylesheet" href="styles.css?v=craft-v15" />
+    <link rel="stylesheet" href="styles.css?v=craft-v16" />
   </head>
   <body>
     <div class="app-shell">
@@ -74,6 +74,17 @@
         </section>
 
         <section class="month-card" id="homeMonthStats"></section>
+
+        <section class="home-section home-ideas">
+          <div class="section-heading">
+            <h2>灵感</h2>
+          </div>
+          <label class="idea-composer">
+            <input id="ideaInput" type="text" placeholder="想到什么，就先记一句..." />
+            <button id="addIdeaBtn" type="button">添加</button>
+          </label>
+          <div class="idea-list" id="ideaList"></div>
+        </section>
 
         <section class="home-section timeline-section">
           <div class="section-heading">
@@ -166,20 +177,8 @@
       <nav class="mobile-tabbar" aria-label="手机底部导航">
         <button class="active" type="button" data-mobile-tab="home"><span class="tab-emoji" aria-hidden="true">🏠</span><small>首页</small></button>
         <button type="button" data-mobile-tab="diary"><span class="tab-emoji" aria-hidden="true">📔</span><small>日记</small></button>
-        <button type="button" data-mobile-tab="ideas"><span class="tab-emoji" aria-hidden="true">💡</span><small>灵感</small></button>
+        <button type="button" data-mobile-tab="settings"><span class="tab-emoji" aria-hidden="true">⚙️</span><small>设置</small></button>
       </nav>
-
-      <section class="mobile-only-panel ideas-page mobile-page" data-mobile-page="ideas">
-        <div class="mobile-panel-card">
-          <h2>灵感</h2>
-          <p>先放下一句话。等想清楚了，再整理进日记。</p>
-          <label class="idea-composer">
-            <input id="ideaInput" type="text" placeholder="想到什么，就先记一句..." />
-            <button id="addIdeaBtn" type="button">添加</button>
-          </label>
-          <div class="idea-list" id="ideaList"></div>
-        </div>
-      </section>
 
       <div class="sheet-backdrop" id="sheetBackdrop" hidden></div>
       <section class="insert-sheet" id="insertSheet" hidden aria-label="更多块菜单">
@@ -220,6 +219,6 @@
     <input id="imagePicker" type="file" accept="image/*" hidden />
     <input id="coverPicker" type="file" accept="image/*" hidden />
     <input id="coverLibraryPicker" type="file" accept="image/*" multiple hidden />
-    <script src="app.js?v=craft-v15"></script>
+    <script src="app.js?v=craft-v16"></script>
   </body>
 </html>

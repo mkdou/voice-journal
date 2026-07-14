@@ -799,7 +799,7 @@ function renderMobileView() {
   });
   document.querySelectorAll("[data-mobile-tab]").forEach((button) => {
     const tab = button.dataset.mobileTab;
-    button.classList.toggle("active", tab === state.mobileTab || (state.mobileTab === "editor" && tab === "home"));
+    button.classList.toggle("active", tab === state.mobileTab || (state.mobileTab === "editor" && tab === "diary"));
   });
 }
 
@@ -1959,7 +1959,7 @@ async function init() {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("./sw.js?v=35").then((registration) => registration.update()).catch(() => {});
+  navigator.serviceWorker.register("./sw.js?v=36").then((registration) => registration.update()).catch(() => {});
 }
 
 init().catch((error) => {

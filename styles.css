@@ -1390,6 +1390,17 @@ button {
     margin: 12px 0 0;
   }
 
+  .home-ideas {
+    padding: 16px;
+    border-radius: 22px;
+    background: rgba(255, 254, 250, 0.72);
+    box-shadow: var(--soft-shadow);
+  }
+
+  .home-ideas .idea-list {
+    margin-top: 12px;
+  }
+
   .home-timeline {
     display: grid;
     gap: 14px;
