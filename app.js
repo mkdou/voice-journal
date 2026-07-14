@@ -1448,19 +1448,20 @@ async function copyTranscript(blockId, button) {
     flashButtonLabel(button, "无转写");
     return;
   }
+  insertBlockAfter(blockId, "text", { text });
   try {
     if (navigator.clipboard?.writeText && window.isSecureContext) {
       await navigator.clipboard.writeText(text);
     } else if (!fallbackCopyText(text)) {
       throw new Error("copy failed");
     }
-    flashButtonLabel(button, "已复制");
+    flashButtonLabel(button, "已插入");
   } catch (error) {
     if (fallbackCopyText(text)) {
-      flashButtonLabel(button, "已复制");
+      flashButtonLabel(button, "已插入");
       return;
     }
-    flashButtonLabel(button, "复制失败");
+    flashButtonLabel(button, "已插入");
   }
 }
 
@@ -1787,7 +1788,7 @@ async function init() {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("./sw.js?v=33").then((registration) => registration.update()).catch(() => {});
+  navigator.serviceWorker.register("./sw.js?v=34").then((registration) => registration.update()).catch(() => {});
 }
 
 init().catch((error) => {
