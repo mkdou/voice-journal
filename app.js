@@ -525,7 +525,9 @@ function renderEditor() {
   const background = coverBackground(entry);
   document.documentElement.style.setProperty("--journal-bg", background);
   el.coverArea.style.backgroundImage = background;
-  el.insertDateTopBtn.innerHTML = `${icon("calendar")} ${escapeHtml(displayDate(entry.date || todayISO()))}`;
+  if (el.insertDateTopBtn) {
+    el.insertDateTopBtn.innerHTML = `${icon("calendar")} ${escapeHtml(displayDate(entry.date || todayISO()))}`;
+  }
   el.blockList.innerHTML = entry.blocks.map(renderBlock).join("");
   attachAudioListeners();
   hydrateIcons(el.blockList);
@@ -1414,10 +1416,52 @@ function seekAudio(blockId, seconds) {
   audio.currentTime = Number(seconds) || 0;
 }
 
-async function copyTranscript(blockId) {
+function fallbackCopyText(text) {
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.top = "-9999px";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  textarea.setSelectionRange(0, text.length);
+  const copied = document.execCommand("copy");
+  textarea.remove();
+  return copied;
+}
+
+function flashButtonLabel(button, label) {
+  if (!button) return;
+  const original = button.textContent;
+  button.textContent = label;
+  window.setTimeout(() => {
+    button.textContent = original;
+  }, 1400);
+}
+
+async function copyTranscript(blockId, button) {
   const block = activeEntry()?.blocks.find((item) => item.id === blockId);
   const text = block?.transcriptEdited || block?.transcript || "";
-  if (text) await navigator.clipboard.writeText(text);
+  if (!text.trim()) {
+    flashButtonLabel(button, "无转写");
+    return;
+  }
+  try {
+    if (navigator.clipboard?.writeText && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+    } else if (!fallbackCopyText(text)) {
+      throw new Error("copy failed");
+    }
+    flashButtonLabel(button, "已复制");
+  } catch (error) {
+    if (fallbackCopyText(text)) {
+      flashButtonLabel(button, "已复制");
+      return;
+    }
+    flashButtonLabel(button, "复制失败");
+  }
 }
 
 function organizeTranscript(blockId) {
@@ -1593,7 +1637,7 @@ function bindEvents() {
     }
     const copyButton = event.target.closest("[data-copy-transcript]");
     if (copyButton) {
-      copyTranscript(copyButton.dataset.copyTranscript);
+      copyTranscript(copyButton.dataset.copyTranscript, copyButton);
       return;
     }
     const organizeButton = event.target.closest("[data-organize-transcript]");
@@ -1621,7 +1665,7 @@ function bindEvents() {
     handleInsert(button.dataset.insert);
   });
 
-  el.insertDateTopBtn.addEventListener("click", () => {
+  el.insertDateTopBtn?.addEventListener("click", () => {
     const entry = activeEntry();
     let block = entry?.blocks.find((item) => item.type === "date");
     if (!block) block = insertBlock("date");
@@ -1743,7 +1787,7 @@ async function init() {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("./sw.js?v=32").then((registration) => registration.update()).catch(() => {});
+  navigator.serviceWorker.register("./sw.js?v=33").then((registration) => registration.update()).catch(() => {});
 }
 
 init().catch((error) => {
