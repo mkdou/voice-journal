@@ -62,6 +62,8 @@ const el = {
   folderNav: document.querySelector("#folderNav"),
   entryList: document.querySelector("#entryList"),
   titleInput: document.querySelector("#titleInput"),
+  editorMeta: document.querySelector("#editorMeta"),
+  editorSaveStatus: document.querySelector("#editorSaveStatus"),
   subtitleInput: document.querySelector("#subtitleInput"),
   blockList: document.querySelector("#blockList"),
   imagePicker: document.querySelector("#imagePicker"),
@@ -649,6 +651,11 @@ function renderEditor() {
   const entry = activeEntry();
   if (!entry) return;
   el.titleInput.value = displayEntryTitle(entry);
+  if (el.editorMeta) {
+    const date = new Date(`${entry.date || todayISO()}T00:00:00`);
+    const dateText = new Intl.DateTimeFormat("zh-CN", { month: "numeric", day: "numeric", weekday: "short" }).format(date);
+    el.editorMeta.textContent = `${dateText} · ${formatTime(entry.updatedAt || entry.createdAt || nowISO())}`;
+  }
   el.subtitleInput.value = entry.subtitle || "";
   el.subtitleInput.classList.toggle("hidden-subtitle", !entry.subtitle);
   const background = coverBackground(entry);
@@ -794,6 +801,7 @@ function renderIdeas() {
 }
 
 function renderMobileView() {
+  document.body.classList.toggle("is-editor-page", state.mobileTab === "editor");
   document.querySelectorAll("[data-mobile-page]").forEach((page) => {
     page.classList.toggle("active", page.dataset.mobilePage === state.mobileTab);
   });
@@ -1080,6 +1088,7 @@ async function deleteEntry(entryId) {
 
 function touchEntry(entry) {
   entry.updatedAt = nowISO();
+  if (el.editorSaveStatus) el.editorSaveStatus.textContent = "保存中";
   queueSave();
 }
 
@@ -1095,6 +1104,7 @@ async function saveActiveEntry() {
   await putEntry(entry);
   state.entries = state.entries.map((item) => item.id === entry.id ? entry : item).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
   el.saveStatus.textContent = `已自动保存 ${formatTime(new Date())}`;
+  if (el.editorSaveStatus) el.editorSaveStatus.textContent = "已保存";
   renderHome();
   renderEntries();
 }
@@ -1959,7 +1969,7 @@ async function init() {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("./sw.js?v=36").then((registration) => registration.update()).catch(() => {});
+  navigator.serviceWorker.register("./sw.js?v=37").then((registration) => registration.update()).catch(() => {});
 }
 
 init().catch((error) => {

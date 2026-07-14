@@ -324,6 +324,57 @@ button {
   z-index: 1;
 }
 
+.editor-topbar {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  max-width: 980px;
+  margin: 18px auto 0;
+  color: var(--ink);
+}
+
+.editor-back,
+.editor-top-actions button {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 254, 250, 0.86);
+  color: var(--ink);
+  box-shadow: var(--soft-shadow);
+}
+
+.editor-title-group {
+  display: grid;
+  min-width: 0;
+  justify-items: center;
+}
+
+.editor-title-group .doc-title {
+  text-align: center;
+}
+
+.editor-title-group p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.editor-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.editor-top-actions span {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .cover {
   height: 214px;
   margin: 0 -22px;
@@ -1494,18 +1545,53 @@ button {
     height: auto;
     min-height: 100vh;
     overflow: visible;
-    padding: 0 18px 92px;
+    padding: 14px 22px 112px;
+    background-image: none;
+    background-color: #fbfaf6;
+  }
+
+  .main-stage::before {
+    display: none;
+  }
+
+  .editor-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 8;
+    grid-template-columns: 38px minmax(0, 1fr) auto;
+    margin: 0 -4px 14px;
+    padding: 8px 0 10px;
+    background: rgba(251, 250, 246, 0.88);
+    backdrop-filter: blur(18px);
+  }
+
+  .editor-title-group .doc-title {
+    font-size: 21px;
+    line-height: 1.2;
+  }
+
+  .editor-top-actions span {
+    font-size: 11px;
+  }
+
+  .editor-back,
+  .editor-top-actions button {
+    width: 36px;
+    height: 36px;
+    box-shadow: none;
   }
 
   .cover {
-    height: 176px;
-    margin: 0 -18px;
-    padding: 24px;
+    height: 142px;
+    margin: 0 0 14px;
+    padding: 16px;
+    border-radius: 18px;
   }
 
   .cover-actions {
-    top: 12px;
     right: 12px;
+    bottom: 12px;
+    top: auto;
     display: flex;
     max-width: calc(100% - 24px);
   }
@@ -1517,15 +1603,18 @@ button {
   }
 
   .cover p {
-    font-size: 18px;
+    display: none;
   }
 
   .paper {
     min-height: auto;
-    margin: -54px auto 0;
-    padding: 24px 20px 84px;
+    margin: 0 auto;
+    padding: 0 0 92px;
+    border: 0;
     border-radius: 22px;
-    background: rgba(255, 254, 250, 0.88);
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
   }
 
   .doc-title {
@@ -1535,8 +1624,9 @@ button {
   .floating-toolbar {
     position: fixed;
     right: 18px;
-    bottom: 86px;
+    bottom: calc(12px + env(safe-area-inset-bottom));
     left: 18px;
+    z-index: 30;
     justify-content: center;
     margin: 0 auto;
   }
@@ -1552,6 +1642,10 @@ button {
     opacity: 1;
     pointer-events: auto;
     transform: translateY(0);
+  }
+
+  body.is-editor-page .mobile-tabbar {
+    display: none;
   }
 
   .record-dock {

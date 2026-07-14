@@ -10,7 +10,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="icon.svg" />
-    <link rel="stylesheet" href="styles.css?v=craft-v16" />
+    <link rel="stylesheet" href="styles.css?v=craft-v17" />
   </head>
   <body>
     <div class="app-shell">
@@ -96,16 +96,25 @@
       </section>
 
       <main class="main-stage mobile-page" data-mobile-page="editor">
+        <header class="editor-topbar">
+          <button class="editor-back" type="button" data-mobile-tab="diary" aria-label="返回日记列表">←</button>
+          <div class="editor-title-group">
+            <input class="doc-title" id="titleInput" placeholder="今天的标题" />
+            <p id="editorMeta">今天 · 已自动保存</p>
+          </div>
+          <div class="editor-top-actions">
+            <span id="editorSaveStatus">已保存</span>
+            <button type="button" id="deleteEntryBtn" aria-label="更多">•••</button>
+          </div>
+        </header>
         <div class="cover" id="coverArea">
           <div class="cover-actions">
-            <button type="button" id="changeCoverBtn">更换封面</button>
-            <button type="button" id="deleteEntryBtn">删除日记</button>
+            <button type="button" id="changeCoverBtn"><span data-icon="image"></span> 更换封面</button>
           </div>
           <p>听见生活，记录此刻</p>
         </div>
 
         <article class="paper">
-          <input class="doc-title" id="titleInput" placeholder="今天的标题" />
           <input class="doc-subtitle" id="subtitleInput" placeholder="" />
           <div class="block-list" id="blockList"></div>
         </article>
@@ -219,6 +228,6 @@
     <input id="imagePicker" type="file" accept="image/*" hidden />
     <input id="coverPicker" type="file" accept="image/*" hidden />
     <input id="coverLibraryPicker" type="file" accept="image/*" multiple hidden />
-    <script src="app.js?v=craft-v16"></script>
+    <script src="app.js?v=craft-v17"></script>
   </body>
 </html>
