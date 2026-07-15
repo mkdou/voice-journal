@@ -1,6 +1,10 @@
 const DB_NAME = "voice-journal-db";
 const DB_VERSION = 5;
 
+if (typeof history !== "undefined" && "scrollRestoration" in history) {
+  history.scrollRestoration = "manual";
+}
+
 const coverPresets = {
   forest: "",
   ocean: "linear-gradient(135deg, #d9f0ec 0%, #92c9c4 48%, #f8f4df 100%)",
@@ -614,7 +618,14 @@ function renderHome() {
   const photos = monthEntries.reduce((sum, entry) => sum + imageBlocks(entry).length, 0);
   const audioMs = monthEntries.reduce((sum, entry) => sum + entryAudioMs(entry), 0);
   el.homeMonthStats.innerHTML = `
-    <div class="month-jar">🌿</div>
+    <div class="month-jar" aria-hidden="true">
+      <span class="jar-lid"></span>
+      <span class="jar-glass">
+        <i class="jar-plant"></i>
+        <i class="jar-photo"></i>
+        <i class="jar-note"></i>
+      </span>
+    </div>
     <div>
       <h2>你在这个月留下了 🌱</h2>
       <div class="month-grid">
@@ -815,6 +826,10 @@ function renderMobileView() {
     const tab = button.dataset.mobileTab;
     button.classList.toggle("active", tab === state.mobileTab || (state.mobileTab === "editor" && tab === "diary"));
   });
+}
+
+function scrollPageTop() {
+  window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: "auto" }));
 }
 
 function renderSyncState() {
@@ -1863,6 +1878,7 @@ function bindEvents() {
     button.addEventListener("click", () => {
       state.mobileTab = button.dataset.mobileTab;
       renderMobileView();
+      scrollPageTop();
     });
   });
   el.imagePicker.addEventListener("change", () => handleImageFile(el.imagePicker.files[0]));
@@ -1964,18 +1980,20 @@ function bindEvents() {
 }
 
 async function init() {
+  scrollPageTop();
   hydrateIcons();
   state.db = await openDb();
   await seedIfNeeded();
   state.recognition = setupSpeechRecognition();
   bindEvents();
   await loadData();
+  scrollPageTop();
   registerServiceWorker();
 }
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("./sw.js?v=39").then((registration) => registration.update()).catch(() => {});
+  navigator.serviceWorker.register("./sw.js?v=40").then((registration) => registration.update()).catch(() => {});
 }
 
 init().catch((error) => {
