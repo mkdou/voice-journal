@@ -1,14 +1,14 @@
 :root {
   color-scheme: light;
-  --bg: #f4f2ed;
+  --bg: #f5efe6;
   --paper: #fffefa;
   --paper-soft: rgba(255, 254, 250, 0.78);
   --ink: #24231f;
   --muted: #77756e;
   --line: rgba(36, 35, 31, 0.09);
-  --green: #9fdbbe;
-  --green-deep: #3f8a68;
-  --green-soft: #e7f4ed;
+  --green: #efb98b;
+  --green-deep: #8f5d3f;
+  --green-soft: #fff0df;
   --shadow: 0 24px 80px rgba(36, 31, 24, 0.12);
   --soft-shadow: 0 8px 24px rgba(36, 31, 24, 0.08);
   --radius: 24px;
@@ -118,9 +118,11 @@ button {
   width: 38px;
   height: 38px;
   place-items: center;
-  border-radius: 9px;
-  background: linear-gradient(135deg, #b8e8ce, #8bcfaa);
-  color: #173d2e;
+  border-radius: 13px;
+  background:
+    linear-gradient(135deg, rgba(255, 253, 248, 0.82), rgba(255, 253, 248, 0.28)),
+    linear-gradient(135deg, #f3c08d, #75628b);
+  color: #2b2421;
   font-weight: 900;
 }
 
@@ -147,10 +149,10 @@ button {
   min-height: 44px;
   border: 0;
   border-radius: 12px;
-  background: linear-gradient(135deg, #7bc79b, #a8dfc2);
-  color: #173d2e;
-  font-weight: 800;
-  box-shadow: 0 10px 24px rgba(63, 138, 104, 0.18);
+  background: linear-gradient(135deg, #f0b77f, #7b688d);
+  color: #fffdf8;
+  font-weight: 900;
+  box-shadow: 0 10px 24px rgba(143, 93, 63, 0.18);
 }
 
 .new-entry-button {
@@ -213,8 +215,8 @@ button {
 
 .folder-button.active,
 .entry-button.active {
-  background: rgba(159, 219, 190, 0.24);
-  color: #244d3c;
+  background: rgba(239, 185, 139, 0.22);
+  color: #5e3c2b;
 }
 
 .folder-button small {
@@ -236,21 +238,41 @@ button {
 }
 
 .entry-row.active .entry-button {
-  background: rgba(159, 219, 190, 0.24);
-  color: #244d3c;
+  background: rgba(239, 185, 139, 0.22);
+  color: #5e3c2b;
 }
 
 .entry-button {
-  grid-template-columns: 1fr auto;
-  gap: 5px;
+  grid-template-columns: 58px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
   padding: 10px;
   font-size: 13px;
 }
 
-.entry-button span:first-child {
+.journal-copy {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.journal-copy strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.journal-thumb {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  place-items: center;
+  border-radius: 16px;
+  background-position: center;
+  background-size: cover;
+  color: white;
+  font-size: 24px;
+  box-shadow: var(--soft-shadow);
 }
 
 .entry-delete {
@@ -1197,6 +1219,12 @@ button {
     background: transparent;
   }
 
+  .sidebar {
+    background:
+      radial-gradient(circle at 90% 0%, rgba(239, 185, 139, 0.28), transparent 34%),
+      linear-gradient(180deg, #fffdf8 0%, #f5efe6 100%);
+  }
+
   .home-page {
     padding: 34px 20px 118px;
     background:
@@ -1537,8 +1565,39 @@ button {
     margin-bottom: 16px;
   }
 
+  .brand-row h1 {
+    font-size: 26px;
+    letter-spacing: 0;
+  }
+
+  .brand-row p {
+    font-size: 13px;
+  }
+
   .new-entry-button {
     margin-top: 14px;
+  }
+
+  .folder-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .folder-button {
+    min-height: 48px;
+    border: 1px solid rgba(36, 35, 31, 0.07);
+    background: rgba(255, 254, 250, 0.62);
+    box-shadow: 0 8px 22px rgba(36, 31, 24, 0.05);
+  }
+
+  .folder-button:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .recent-section h2 {
+    margin-top: 26px;
+    color: var(--ink);
+    font-size: 16px;
   }
 
   .main-stage {
@@ -1828,11 +1887,18 @@ button {
     position: relative;
     display: block;
     overflow: hidden;
+    border-radius: 20px;
   }
 
   .entry-row .entry-button {
     position: relative;
     z-index: 1;
+    min-height: 82px;
+    padding: 12px;
+    border: 1px solid rgba(36, 35, 31, 0.07);
+    border-radius: 20px;
+    background: rgba(255, 254, 250, 0.74);
+    box-shadow: 0 10px 28px rgba(36, 31, 24, 0.06);
     transition: transform 0.18s ease;
   }
 

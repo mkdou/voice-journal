@@ -4,8 +4,8 @@
   "description": "录音、中文转写、Markdown 日记",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#f6faf5",
-  "theme_color": "#a7d7bd",
+  "background_color": "#fbf7ef",
+  "theme_color": "#efb98b",
   "orientation": "portrait-primary",
   "icons": [
     {

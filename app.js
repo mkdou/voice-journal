@@ -505,16 +505,22 @@ function renderEntries() {
     el.entryList.innerHTML = `<div class="empty-state">没有找到日记</div>`;
     return;
   }
-  el.entryList.innerHTML = entries.map((entry) => `
-    <div class="entry-row ${entry.id === state.activeEntryId ? "active" : ""}">
+  el.entryList.innerHTML = entries.map((entry) => {
+    const visual = entryVisual(entry);
+    return `
+    <div class="entry-row journal-card-row ${entry.id === state.activeEntryId ? "active" : ""}">
       <button class="entry-button" data-entry="${entry.id}" type="button">
-        <span>${escapeHtml(displayEntryTitle(entry))}</span>
+        <span class="journal-thumb" style='${visualStyle(visual)}'>${visual.emoji || ""}</span>
+        <span class="journal-copy">
+          <strong>${escapeHtml(displayEntryTitle(entry))}</strong>
+          <small>${entryStats(entry)} · ${compactDuration(entryAudioMs(entry))}</small>
+        </span>
         <time>${relativeDay(entry.date || entry.createdAt)}</time>
-        <small>${entryStats(entry)} · ${escapeHtml(entry.subtitle || previewEntry(entry))}</small>
       </button>
       <button class="entry-delete" data-delete-entry="${entry.id}" type="button">删除</button>
     </div>
-  `).join("");
+  `;
+  }).join("");
 }
 
 function previewEntry(entry) {
@@ -1969,7 +1975,7 @@ async function init() {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("./sw.js?v=37").then((registration) => registration.update()).catch(() => {});
+  navigator.serviceWorker.register("./sw.js?v=39").then((registration) => registration.update()).catch(() => {});
 }
 
 init().catch((error) => {
