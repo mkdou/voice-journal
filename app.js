@@ -409,6 +409,9 @@ function normalizeEntry(entry) {
           durationMs: 0,
           transcript: "",
           transcriptEdited: "",
+          transcriptCollapsed: false,
+          punctuationStatus: "idle",
+          punctuationError: "",
           createdAt: entry.updatedAt || nowISO(),
           ...block,
           status: block.audioDataUrl ? "done" : (block.status || "idle")
@@ -723,6 +726,16 @@ function renderBlock(block) {
 function renderAudioBlock(block, menu) {
   const status = block.status || (block.audioDataUrl ? "done" : "idle");
   const duration = status === "recording" ? currentRecordingDuration() : formatDurationFromBlock(block);
+  const transcriptText = block.transcriptEdited || block.transcript || "这段录音暂时没有转写文字。";
+  const isTranscriptCollapsed = Boolean(block.transcriptCollapsed);
+  const transcriptStatus = block.punctuationStatus === "polishing"
+    ? `<span class="transcript-badge">整理中...</span>`
+    : block.transcriptEdited
+      ? `<span class="transcript-badge done">已整理</span>`
+      : "";
+  const transcriptError = block.punctuationError
+    ? `<div class="transcript-error">${escapeHtml(block.punctuationError)}</div>`
+    : "";
   if (status === "recording" || status === "paused") {
     return `
       <section class="block audio-block voice-block ${status}" data-block="${block.id}">
@@ -761,9 +774,20 @@ function renderAudioBlock(block, menu) {
         <span class="audio-meta">${escapeHtml(block.createdAt ? formatTime(block.createdAt) : "")}</span>
       </div>
       ${renderPlayer(block)}
-      <div class="transcript"><strong>转写文字：</strong><br>${escapeHtml(block.transcriptEdited || block.transcript || "这段录音暂时没有转写文字。")}</div>
+      <div class="transcript ${isTranscriptCollapsed ? "collapsed" : ""}">
+        <div class="transcript-head">
+          <strong>转写文字：</strong>
+          <span>
+            ${transcriptStatus}
+            <button class="transcript-toggle" type="button" data-toggle-transcript="${block.id}" aria-label="${isTranscriptCollapsed ? "展开转写" : "收起转写"}">${isTranscriptCollapsed ? "展开⌄" : "收起⌃"}</button>
+          </span>
+        </div>
+        <div class="transcript-body">${escapeHtml(transcriptText)}</div>
+      </div>
+      ${transcriptError}
       <div class="voice-actions">
         <button type="button" data-copy-transcript="${block.id}">复制转写</button>
+        <button type="button" data-punctuate-transcript="${block.id}" ${block.punctuationStatus === "polishing" ? "disabled" : ""}>${block.punctuationStatus === "polishing" ? "整理中" : "整理标点"}</button>
         <button type="button" data-organize-transcript="${block.id}">整理成日记</button>
       </div>
       ${block.audioId || block.audioDataUrl ? `<audio class="sr-audio" preload="metadata" playsinline data-audio="${block.id}" data-audio-id="${escapeHtml(block.audioId || "")}" ${block.audioDataUrl ? `src="${block.audioDataUrl}"` : ""}></audio>` : `<div class="playback-error">这段录音没有可播放文件。</div>`}
@@ -795,7 +819,7 @@ function renderAudioDock() {
   el.audioMiniList.innerHTML = audioBlocks.map((block) => `
     <div class="mini-audio">
       <b>${icon("play")}</b>
-      <span>${escapeHtml(block.transcript || "未转写")}</span>
+      <span>${escapeHtml(block.transcriptEdited || block.transcript || "未转写")}</span>
       <time>${escapeHtml(block.duration || "00:00")}</time>
     </div>
   `).join("");
@@ -1002,7 +1026,7 @@ function convertBlockToText(blockId) {
 function createBlock(type, payload = {}) {
   if (type === "date") return { id: uid("block"), type, date: payload.date || todayISO() };
   if (type === "image") return { id: uid("block"), type, src: payload.src, caption: payload.caption || "" };
-  if (type === "audio") return { id: uid("block"), type, status: payload.status || "idle", duration: "00:00", durationMs: 0, transcript: "", transcriptEdited: "", audioDataUrl: "", createdAt: nowISO() };
+  if (type === "audio") return { id: uid("block"), type, status: payload.status || "idle", duration: "00:00", durationMs: 0, transcript: "", transcriptEdited: "", transcriptCollapsed: false, punctuationStatus: "idle", punctuationError: "", audioDataUrl: "", createdAt: nowISO() };
   if (type === "divider") return { id: uid("block"), type };
   if (type === "todo") return { id: uid("block"), type, text: payload.text || "", checked: false };
   if (type === "quote") return { id: uid("block"), type, text: payload.text || "引用一段文字" };
@@ -1603,6 +1627,62 @@ function flashButtonLabel(button, label) {
   }, 1400);
 }
 
+function punctuationEndpoint() {
+  if (location.hostname.endsWith("github.io")) {
+    return "https://voice-journal-nu.vercel.app/api/punctuate";
+  }
+  return "/api/punctuate";
+}
+
+async function punctuateTranscript(blockId, button) {
+  const entry = activeEntry();
+  const block = entry?.blocks.find((item) => item.id === blockId);
+  const text = block?.transcriptEdited || block?.transcript || "";
+  if (!block || !text.trim()) {
+    flashButtonLabel(button, "无转写");
+    return;
+  }
+  if (block.punctuationStatus === "polishing") return;
+
+  updateBlock(blockId, { punctuationStatus: "polishing", punctuationError: "" });
+  render();
+
+  try {
+    const response = await fetch(punctuationEndpoint(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(result?.error || "整理标点失败，请稍后再试。");
+    }
+    const polished = String(result?.text || "").trim();
+    updateBlock(blockId, {
+      transcriptEdited: polished || text,
+      punctuationStatus: "done",
+      punctuationError: "",
+      transcriptCollapsed: false
+    });
+    await saveActiveEntry();
+    render();
+  } catch (error) {
+    updateBlock(blockId, {
+      punctuationStatus: "failed",
+      punctuationError: error.message || "整理标点失败，已保留原转写。"
+    });
+    await saveActiveEntry();
+    render();
+  }
+}
+
+function toggleTranscript(blockId) {
+  const block = activeEntry()?.blocks.find((item) => item.id === blockId);
+  if (!block) return;
+  updateBlock(blockId, { transcriptCollapsed: !block.transcriptCollapsed });
+  render();
+}
+
 async function copyTranscript(blockId, button) {
   const block = activeEntry()?.blocks.find((item) => item.id === blockId);
   const text = block?.transcriptEdited || block?.transcript || "";
@@ -1843,6 +1923,16 @@ function bindEvents() {
       copyTranscript(copyButton.dataset.copyTranscript, copyButton);
       return;
     }
+    const punctuateButton = event.target.closest("[data-punctuate-transcript]");
+    if (punctuateButton) {
+      punctuateTranscript(punctuateButton.dataset.punctuateTranscript, punctuateButton);
+      return;
+    }
+    const transcriptToggle = event.target.closest("[data-toggle-transcript]");
+    if (transcriptToggle) {
+      toggleTranscript(transcriptToggle.dataset.toggleTranscript);
+      return;
+    }
     const organizeButton = event.target.closest("[data-organize-transcript]");
     if (organizeButton) {
       organizeTranscript(organizeButton.dataset.organizeTranscript);
@@ -1993,7 +2083,7 @@ async function init() {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("./sw.js?v=40").then((registration) => registration.update()).catch(() => {});
+  navigator.serviceWorker.register("./sw.js?v=41").then((registration) => registration.update()).catch(() => {});
 }
 
 init().catch((error) => {

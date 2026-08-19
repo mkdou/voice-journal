@@ -2,6 +2,9 @@
   "functions": {
     "api/transcribe.js": {
       "maxDuration": 60
+    },
+    "api/punctuate.js": {
+      "maxDuration": 30
     }
   }
 }

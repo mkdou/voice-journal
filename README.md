@@ -51,3 +51,17 @@ https://your-vercel-app.vercel.app/api/transcribe
 ```
 
 只有点击“生成准确转写”时，对应录音分段才会上传到后端；平时录音、日记、草稿转写仍保存在当前设备本地浏览器。
+
+## 整理标点后端
+
+录音实时转写仍使用浏览器 Web Speech API。本功能只在用户点击录音块里的“整理标点”时，把该段转写文字发送到阿里云百炼，不上传原始录音。
+
+Vercel 环境变量：
+
+```text
+DASHSCOPE_API_KEY=你的阿里云百炼 API Key
+PUNCTUATION_MODEL=qwen-plus
+ALLOWED_ORIGIN=https://mkdou.github.io
+```
+
+整理成功后会写入该录音块的 `transcriptEdited`，后续点击“复制转写”会复制并插入带标点版本。

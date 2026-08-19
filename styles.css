@@ -684,6 +684,67 @@ button {
   word-break: break-word;
 }
 
+.transcript-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.transcript-head > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.transcript-body {
+  white-space: pre-wrap;
+}
+
+.transcript.collapsed .transcript-body {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.transcript-toggle {
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid rgba(36, 31, 24, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.transcript-badge {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #f5e7dd;
+  color: #9a5a3c;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.transcript-badge.done {
+  background: #eef3e7;
+  color: #527550;
+}
+
+.transcript-error {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #fbebe7;
+  color: #9a3d35;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
 .recording-chip,
 .voice-status {
   display: inline-flex;
