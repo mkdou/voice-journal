@@ -89,6 +89,8 @@ const el = {
   clearCoverLibraryBtn: document.querySelector("#clearCoverLibraryBtn"),
   coverLibraryList: document.querySelector("#coverLibraryList"),
   coverLibraryStatus: document.querySelector("#coverLibraryStatus"),
+  coverChoiceStatus: document.querySelector("#coverChoiceStatus"),
+  coverChoiceLibrary: document.querySelector("#coverChoiceLibrary"),
   changeCoverBtn: document.querySelector("#changeCoverBtn"),
   deleteEntryBtn: document.querySelector("#deleteEntryBtn"),
   dateSheet: document.querySelector("#dateSheet"),
@@ -705,7 +707,11 @@ function renderEditor() {
   el.subtitleInput.value = entry.subtitle || "";
   el.subtitleInput.classList.toggle("hidden-subtitle", !entry.subtitle);
   const background = coverBackground(entry);
-  document.documentElement.style.setProperty("--journal-bg", background);
+  if (background) {
+    document.documentElement.style.setProperty("--journal-bg", background);
+  } else {
+    document.documentElement.style.removeProperty("--journal-bg");
+  }
   el.coverArea.style.backgroundImage = background;
   if (el.insertDateTopBtn) {
     el.insertDateTopBtn.innerHTML = `${icon("calendar")} ${escapeHtml(displayDate(entry.date || todayISO()))}`;
@@ -907,6 +913,24 @@ function renderCoverLibrary() {
     </figure>
   `).join("");
   hydrateIcons(el.coverLibraryList);
+}
+
+function renderCoverChoices() {
+  if (!el.coverChoiceStatus || !el.coverChoiceLibrary) return;
+  const entry = activeEntry();
+  el.coverChoiceStatus.textContent = state.coverImages.length
+    ? `从你上传的 ${state.coverImages.length} 张备用照片中选择`
+    : "备用封面库还是空的，可以从相册选择一张。";
+  el.coverChoiceLibrary.innerHTML = state.coverImages.map((image, index) => {
+    const selected = Boolean(entry?.coverImage && entry.coverImage === image.src);
+    const label = image.name || `备用背景 ${index + 1}`;
+    return `
+      <button class="cover-choice-thumb ${selected ? "selected" : ""}" type="button" data-cover-library-id="${image.id}" aria-label="使用${escapeHtml(label)}">
+        <img src="${image.src}" alt="${escapeHtml(label)}" loading="lazy" decoding="async" />
+        <span aria-hidden="true">✓</span>
+      </button>
+    `;
+  }).join("");
 }
 
 function currentRecordingDuration() {
@@ -1469,6 +1493,17 @@ function applyCoverChoice(choice) {
   closeInsertSheet();
 }
 
+function applyLibraryCover(coverId) {
+  const entry = activeEntry();
+  const image = state.coverImages.find((item) => item.id === coverId);
+  if (!entry || !image) return;
+  entry.coverImage = image.src;
+  entry.coverPreset = "library";
+  touchEntry(entry);
+  renderEditor();
+  closeInsertSheet();
+}
+
 async function addIdea(content) {
   const text = content.trim();
   if (!text) return;
@@ -1555,6 +1590,7 @@ function openDateSheet(blockId = null) {
 function openCoverSheet() {
   state.sheetOpen = true;
   state.sheetType = "cover";
+  renderCoverChoices();
   el.sheetBackdrop.hidden = false;
   el.coverSheet.hidden = false;
 }
@@ -2067,7 +2103,7 @@ function bindEvents() {
     const button = event.target.closest("[data-delete-cover-image]");
     if (button) deleteCoverImage(button.dataset.deleteCoverImage);
   });
-  el.changeCoverBtn.addEventListener("click", (event) => {
+  el.changeCoverBtn?.addEventListener("click", (event) => {
     event.stopPropagation();
     openCoverSheet();
   });
@@ -2075,10 +2111,6 @@ function bindEvents() {
     event.stopPropagation();
     const entry = activeEntry();
     if (entry) deleteEntry(entry.id);
-  });
-  el.coverArea.addEventListener("click", (event) => {
-    if (event.target.closest(".cover-actions")) return;
-    openCoverSheet();
   });
   el.sheetBackdrop.addEventListener("click", closeInsertSheet);
   el.insertSheet.addEventListener("click", (event) => {
@@ -2102,6 +2134,11 @@ function bindEvents() {
     closeInsertSheet();
   });
   el.coverSheet.addEventListener("click", (event) => {
+    const libraryButton = event.target.closest("[data-cover-library-id]");
+    if (libraryButton) {
+      applyLibraryCover(libraryButton.dataset.coverLibraryId);
+      return;
+    }
     const button = event.target.closest("[data-cover-choice]");
     if (button) applyCoverChoice(button.dataset.coverChoice);
   });
@@ -2167,7 +2204,7 @@ async function init() {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("./sw.js?v=43").then((registration) => registration.update()).catch(() => {});
+  navigator.serviceWorker.register("./sw.js?v=44").then((registration) => registration.update()).catch(() => {});
 }
 
 init().catch((error) => {

@@ -10,7 +10,7 @@
     <link rel="manifest" href="manifest.webmanifest?v=voice-v2" />
     <link rel="icon" href="icon.svg?v=voice-v2" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="icon.svg?v=voice-v2" />
-    <link rel="stylesheet" href="styles.css?v=craft-v22" />
+    <link rel="stylesheet" href="styles.css?v=craft-v23" />
   </head>
   <body>
     <div class="app-shell">
@@ -104,13 +104,11 @@
           </div>
           <div class="editor-top-actions">
             <span id="editorSaveStatus">已保存</span>
+            <button type="button" id="changeCoverBtn" aria-label="更换背景图"><span data-icon="image"></span></button>
             <button type="button" id="deleteEntryBtn" aria-label="更多">•••</button>
           </div>
         </header>
         <div class="cover" id="coverArea">
-          <div class="cover-actions">
-            <button type="button" id="changeCoverBtn"><span data-icon="image"></span> 更换封面</button>
-          </div>
           <p>听见生活，记录此刻</p>
         </div>
 
@@ -213,21 +211,20 @@
 
       <section class="insert-sheet option-sheet" id="coverSheet" hidden aria-label="更换封面">
         <div class="sheet-handle"></div>
-        <h2>更换封面</h2>
-        <button type="button" data-cover-choice="upload"><span data-icon="image"></span><strong>上传本地图片</strong><small>使用自己的照片</small></button>
-        <button type="button" data-cover-choice="forest"><span data-icon="image"></span><strong>默认森林</strong><small>安静的绿色封面</small></button>
-        <button type="button" data-cover-choice="ocean"><span data-icon="image"></span><strong>海边</strong><small>清透的蓝绿封面</small></button>
-        <button type="button" data-cover-choice="star"><span data-icon="image"></span><strong>星空</strong><small>深色夜空封面</small></button>
-        <button type="button" data-cover-choice="mountain"><span data-icon="image"></span><strong>山川</strong><small>柔和山脊封面</small></button>
-        <button type="button" data-cover-choice="city"><span data-icon="image"></span><strong>城市</strong><small>日常街景封面</small></button>
-        <button type="button" data-cover-choice="gradient"><span data-icon="image"></span><strong>纯色渐变</strong><small>浅绿色渐变</small></button>
-        <button type="button" data-cover-choice="delete"><span data-icon="close"></span><strong>删除封面</strong><small>恢复默认</small></button>
+        <h2>选择背景图</h2>
+        <p class="cover-choice-status" id="coverChoiceStatus"></p>
+        <div class="cover-choice-grid" id="coverChoiceLibrary"></div>
+        <div class="cover-sheet-actions">
+          <button type="button" data-cover-choice="upload"><span data-icon="image"></span><strong>从相册选择</strong><small>只用于当前日记</small></button>
+          <button type="button" data-cover-choice="gradient"><span data-icon="image"></span><strong>使用浅色背景</strong><small>不显示照片</small></button>
+          <button type="button" data-cover-choice="delete"><span data-icon="close"></span><strong>恢复默认背景</strong><small>使用默认背景</small></button>
+        </div>
       </section>
     </div>
 
     <input id="imagePicker" type="file" accept="image/*" hidden />
     <input id="coverPicker" type="file" accept="image/*" hidden />
     <input id="coverLibraryPicker" type="file" accept="image/*" multiple hidden />
-    <script src="app.js?v=craft-v23"></script>
+    <script src="app.js?v=craft-v24"></script>
   </body>
 </html>
