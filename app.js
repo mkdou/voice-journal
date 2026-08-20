@@ -200,6 +200,12 @@ function formatTime(value) {
   return new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
 }
 
+function formatRecordingTimestamp(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${date.getMonth() + 1}/${date.getDate()} ${formatTime(date)}`;
+}
+
 function relativeDay(value) {
   const today = new Date(todayISO());
   const date = new Date(`${String(value).slice(0, 10)}T00:00:00`);
@@ -712,7 +718,7 @@ function renderEditor() {
 function renderBlock(block) {
   const menu = `<div class="block-menu"><button data-delete-block="${block.id}" type="button" aria-label="删除块">${icon("more")}</button></div>`;
   if (block.type === "date") {
-    return `<section class="block" data-block="${block.id}"><button class="date-block" data-edit-date="${block.id}" type="button">${icon("calendar")} ${escapeHtml(displayDate(block.date))}</button>${menu}</section>`;
+    return `<section class="block date-block-wrap" data-block="${block.id}"><button class="date-block" data-edit-date="${block.id}" type="button">${icon("calendar")} ${escapeHtml(displayDate(block.date))}</button>${menu}</section>`;
   }
   if (block.type === "divider") {
     return `<section class="block divider-block" data-block="${block.id}"><div class="divider-cards"><span></span><span></span></div>${menu}</section>`;
@@ -736,7 +742,7 @@ function renderBlock(block) {
     return renderAudioBlock(block, menu);
   }
   return `
-    <section class="block" data-block="${block.id}">
+    <section class="block text-card-block" data-block="${block.id}">
       <div class="text-block" contenteditable="true" data-text-block="${block.id}">${escapeHtml(block.text || "")}</div>
       ${menu}
     </section>
@@ -765,7 +771,7 @@ function renderAudioBlock(block, menu) {
       <section class="block audio-block voice-block ${status}" data-block="${block.id}">
         <div class="audio-top">
           <div class="audio-title"><span class="audio-icon">${icon("mic")}</span><span class="voice-status"><span class="recording-dot"></span>${status === "paused" ? "暂停记录中" : "正在录音"} ${escapeHtml(duration)}</span></div>
-          <span class="audio-meta">${escapeHtml(block.createdAt ? formatTime(block.createdAt) : "")}</span>
+          <span class="audio-meta">${escapeHtml(block.createdAt ? formatRecordingTimestamp(block.createdAt) : "")}</span>
         </div>
         <div class="waveform">${Array.from({ length: 34 }, () => "<span></span>").join("")}</div>
         <div class="transcript"><strong>正在听你说……</strong><br>${escapeHtml(block.transcript || state.liveTranscript || "")}</div>
@@ -795,7 +801,7 @@ function renderAudioBlock(block, menu) {
     <section class="block audio-block voice-block" data-block="${block.id}">
       <div class="audio-top">
         <div class="audio-title"><span class="audio-icon">${icon("mic")}</span><span>声音片段 · ${escapeHtml(formatDurationFromBlock(block))}</span></div>
-        <span class="audio-meta">${escapeHtml(block.createdAt ? formatTime(block.createdAt) : "")}</span>
+        <span class="audio-meta">${escapeHtml(block.createdAt ? formatRecordingTimestamp(block.createdAt) : "")}</span>
       </div>
       ${renderPlayer(block)}
       <div class="transcript ${isTranscriptCollapsed ? "collapsed" : ""}">
@@ -1716,8 +1722,15 @@ async function punctuateTranscript(blockId, button) {
 function toggleTranscript(blockId) {
   const block = activeEntry()?.blocks.find((item) => item.id === blockId);
   if (!block) return;
-  updateBlock(blockId, { transcriptCollapsed: !block.transcriptCollapsed });
-  render();
+  const collapsed = !block.transcriptCollapsed;
+  updateBlock(blockId, { transcriptCollapsed: collapsed });
+  const transcript = el.blockList.querySelector(`[data-block="${blockId}"] .transcript`);
+  const button = transcript?.querySelector("[data-toggle-transcript]");
+  transcript?.classList.toggle("collapsed", collapsed);
+  if (button) {
+    button.textContent = collapsed ? "展开⌄" : "收起⌃";
+    button.setAttribute("aria-label", collapsed ? "展开转写" : "收起转写");
+  }
 }
 
 async function copyTranscript(blockId, button) {
@@ -2154,7 +2167,7 @@ async function init() {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("./sw.js?v=42").then((registration) => registration.update()).catch(() => {});
+  navigator.serviceWorker.register("./sw.js?v=43").then((registration) => registration.update()).catch(() => {});
 }
 
 init().catch((error) => {
