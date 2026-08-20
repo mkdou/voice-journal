@@ -504,6 +504,8 @@ button {
   color: #2e2d29;
   font-size: 17px;
   line-height: 1.9;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .text-block:empty::before {
@@ -537,6 +539,8 @@ button {
   color: #2e2d29;
   font-size: 17px;
   line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .todo-block [data-text-block]:empty::before {

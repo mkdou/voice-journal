@@ -36,6 +36,7 @@ const state = {
   sheetType: "",
   search: "",
   activeBlockId: null,
+  pendingImageAnchorId: null,
   recorder: null,
   mediaStream: null,
   recognition: null,
@@ -1120,14 +1121,27 @@ function updateBlock(blockId, patch) {
   queueSave();
 }
 
-function maybeHandleDividerShortcut(blockId, text) {
-  if (text.trim() !== "===") return false;
+function editableText(node) {
+  return String(node?.innerText || "")
+    .replaceAll("\u00a0", " ")
+    .replace(/\r\n?/g, "\n");
+}
+
+function maybeHandleNewCardShortcut(blockId, text) {
+  const normalized = String(text || "").replace(/\r\n?/g, "\n");
+  if (!normalized.endsWith("===")) return false;
   const entry = activeEntry();
   const index = entry?.blocks.findIndex((block) => block.id === blockId);
   if (!entry || index < 0) return false;
-  entry.blocks[index] = { id: blockId, type: "divider" };
+  const block = entry.blocks[index];
+  const textBeforeShortcut = normalized.slice(0, -3).replace(/\n$/, "");
   const next = createBlock("text", { text: "" });
-  entry.blocks.splice(index + 1, 0, next);
+  if (textBeforeShortcut.trim()) {
+    block.text = textBeforeShortcut;
+    entry.blocks.splice(index + 1, 0, next);
+  } else {
+    entry.blocks.splice(index, 1, next);
+  }
   state.activeBlockId = next.id;
   touchEntry(entry);
   render();
@@ -1425,10 +1439,22 @@ function blobToDataUrl(blob) {
   });
 }
 
-async function handleImageFile(file) {
-  if (!file) return;
-  const src = await blobToDataUrl(file);
-  insertBlock("image", { src, caption: file.name });
+async function handleImageFiles(files, anchorBlockId) {
+  const selected = Array.from(files || []).filter((file) => !file.type || file.type.startsWith("image/"));
+  if (!selected.length) return;
+  const entry = activeEntry();
+  if (!entry) return;
+  const imageBlocks = [];
+  for (const file of selected) {
+    const src = await blobToDataUrl(file);
+    imageBlocks.push(createBlock("image", { src, caption: "" }));
+  }
+  const anchorIndex = entry.blocks.findIndex((block) => block.id === anchorBlockId);
+  const insertIndex = anchorIndex >= 0 ? anchorIndex + 1 : entry.blocks.length;
+  entry.blocks.splice(insertIndex, 0, ...imageBlocks);
+  state.activeBlockId = imageBlocks[imageBlocks.length - 1].id;
+  touchEntry(entry);
+  render();
 }
 
 async function handleCoverFile(file) {
@@ -1597,6 +1623,10 @@ function openCoverSheet() {
 
 function handleInsert(type, options = {}) {
   if (type === "image") {
+    const entry = activeEntry();
+    const focusedBlock = document.activeElement?.closest?.("[data-block]")?.dataset.block;
+    const activeExists = entry?.blocks.some((block) => block.id === state.activeBlockId);
+    state.pendingImageAnchorId = focusedBlock || (activeExists ? state.activeBlockId : entry?.blocks[entry.blocks.length - 1]?.id) || null;
     el.imagePicker.click();
     return;
   }
@@ -1846,6 +1876,9 @@ function escapeHtml(value) {
 
 function openEntryEditor(entryId) {
   state.activeEntryId = entryId;
+  const entry = activeEntry();
+  state.activeBlockId = entry?.blocks[entry.blocks.length - 1]?.id || null;
+  state.pendingImageAnchorId = null;
   state.mobileTab = "editor";
   render();
 }
@@ -1968,8 +2001,9 @@ function bindEvents() {
   el.blockList.addEventListener("input", (event) => {
     const textBlock = event.target.closest("[data-text-block]");
     if (textBlock) {
-      if (maybeHandleDividerShortcut(textBlock.dataset.textBlock, textBlock.textContent)) return;
-      updateBlock(textBlock.dataset.textBlock, { text: textBlock.textContent });
+      const text = editableText(textBlock);
+      if (maybeHandleNewCardShortcut(textBlock.dataset.textBlock, text)) return;
+      updateBlock(textBlock.dataset.textBlock, { text });
     }
     const caption = event.target.closest("[data-caption]");
     if (caption) updateBlock(caption.dataset.caption, { caption: caption.textContent });
@@ -1981,10 +2015,9 @@ function bindEvents() {
     const blockId = textBlock.dataset.textBlock;
     const block = activeEntry()?.blocks.find((item) => item.id === blockId);
     if (!block) return;
-    if (event.key === "Enter" && !event.shiftKey) {
+    if (event.key === "Enter" && !event.shiftKey && block.type === "todo") {
       event.preventDefault();
-      const nextType = block.type === "todo" ? "todo" : "text";
-      insertBlockAfter(blockId, nextType);
+      insertBlockAfter(blockId, "todo");
       return;
     }
     if (event.key === "Backspace" && !textBlock.textContent.trim() && block.type === "todo") {
@@ -2091,7 +2124,13 @@ function bindEvents() {
       scrollPageTop();
     });
   });
-  el.imagePicker.addEventListener("change", () => handleImageFile(el.imagePicker.files[0]));
+  el.imagePicker.addEventListener("change", async () => {
+    const files = Array.from(el.imagePicker.files || []);
+    const anchorBlockId = state.pendingImageAnchorId;
+    state.pendingImageAnchorId = null;
+    el.imagePicker.value = "";
+    await handleImageFiles(files, anchorBlockId);
+  });
   el.coverPicker.addEventListener("change", () => handleCoverFile(el.coverPicker.files[0]));
   el.coverLibraryPicker?.addEventListener("change", () => {
     handleCoverLibraryFiles(el.coverLibraryPicker.files);
