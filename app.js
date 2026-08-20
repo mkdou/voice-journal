@@ -27,7 +27,7 @@ const state = {
   entries: [],
   activeEntryId: null,
   activeFolderId: "all",
-  mobileTab: "today",
+  mobileTab: "home",
   syncEmail: localStorage.getItem("voiceJournalSyncEmail") || "",
   ideas: [],
   coverImages: [],
@@ -49,7 +49,8 @@ const state = {
   dateEditingBlockId: null,
   recordingStartedAt: 0,
   timerId: null,
-  saveTimer: null
+  saveTimer: null,
+  copyingTranscriptIds: new Set()
 };
 
 const el = {
@@ -481,14 +482,33 @@ function blockText(block) {
 }
 
 function render() {
+  renderMobileView();
+  if (isMobileLayout()) {
+    if (state.mobileTab === "home") {
+      renderHome();
+      renderIdeas();
+    } else if (state.mobileTab === "diary") {
+      renderFolders();
+      renderEntries();
+    } else if (state.mobileTab === "editor") {
+      renderEditor();
+    } else if (state.mobileTab === "settings") {
+      renderSyncState();
+    }
+    return;
+  }
+
   renderHome();
   renderFolders();
   renderEntries();
   renderEditor();
   renderAudioDock();
   renderIdeas();
-  renderMobileView();
   renderSyncState();
+}
+
+function isMobileLayout() {
+  return window.matchMedia("(max-width: 760px)").matches;
 }
 
 function renderFolders() {
@@ -736,6 +756,10 @@ function renderAudioBlock(block, menu) {
   const transcriptError = block.punctuationError
     ? `<div class="transcript-error">${escapeHtml(block.punctuationError)}</div>`
     : "";
+  const transcriptAlreadyInserted = Boolean(
+    block.transcriptCopyBlockId
+    && activeEntry()?.blocks.some((item) => item.id === block.transcriptCopyBlockId)
+  );
   if (status === "recording" || status === "paused") {
     return `
       <section class="block audio-block voice-block ${status}" data-block="${block.id}">
@@ -786,11 +810,11 @@ function renderAudioBlock(block, menu) {
       </div>
       ${transcriptError}
       <div class="voice-actions">
-        <button type="button" data-copy-transcript="${block.id}">复制转写</button>
+        <button type="button" data-copy-transcript="${block.id}">${transcriptAlreadyInserted ? "已插入" : "复制转写"}</button>
         <button type="button" data-punctuate-transcript="${block.id}" ${block.punctuationStatus === "polishing" ? "disabled" : ""}>${block.punctuationStatus === "polishing" ? "整理中" : "整理标点"}</button>
         <button type="button" data-organize-transcript="${block.id}">整理成日记</button>
       </div>
-      ${block.audioId || block.audioDataUrl ? `<audio class="sr-audio" preload="metadata" playsinline data-audio="${block.id}" data-audio-id="${escapeHtml(block.audioId || "")}" ${block.audioDataUrl ? `src="${block.audioDataUrl}"` : ""}></audio>` : `<div class="playback-error">这段录音没有可播放文件。</div>`}
+      ${block.audioId || block.audioDataUrl ? `<audio class="sr-audio" preload="none" playsinline data-audio="${block.id}" data-audio-id="${escapeHtml(block.audioId || "")}" ${block.audioDataUrl ? `src="${block.audioDataUrl}"` : ""}></audio>` : `<div class="playback-error">这段录音没有可播放文件。</div>`}
       ${menu}
     </section>
   `;
@@ -903,7 +927,6 @@ function attachAudioListeners() {
     const block = activeEntry()?.blocks.find((item) => item.id === blockId);
     audio.muted = false;
     audio.volume = 1;
-    ensureAudioSource(audio, block).catch(() => showPlaybackError(blockId, "录音文件读取失败，请重新录一段。"));
     audio.addEventListener("loadedmetadata", () => {
       if (progress && Number.isFinite(audio.duration)) progress.max = Math.max(1, Math.round(audio.duration));
       syncBlockDurationFromAudio(blockId, audio.duration);
@@ -1030,7 +1053,13 @@ function createBlock(type, payload = {}) {
   if (type === "divider") return { id: uid("block"), type };
   if (type === "todo") return { id: uid("block"), type, text: payload.text || "", checked: false };
   if (type === "quote") return { id: uid("block"), type, text: payload.text || "引用一段文字" };
-  return { id: uid("block"), type: "text", text: payload.text || "" };
+  return {
+    id: uid("block"),
+    type: "text",
+    text: payload.text || "",
+    ...(payload.sourceTranscriptBlockId ? { sourceTranscriptBlockId: payload.sourceTranscriptBlockId } : {}),
+    ...(payload.sourceTranscriptText ? { sourceTranscriptText: payload.sourceTranscriptText } : {})
+  };
 }
 
 function focusBlock(blockId) {
@@ -1144,14 +1173,22 @@ function queueSave() {
 }
 
 async function saveActiveEntry() {
+  window.clearTimeout(state.saveTimer);
+  state.saveTimer = null;
   const entry = activeEntry();
   if (!entry) return;
   await putEntry(entry);
   state.entries = state.entries.map((item) => item.id === entry.id ? entry : item).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
   el.saveStatus.textContent = `已自动保存 ${formatTime(new Date())}`;
   if (el.editorSaveStatus) el.editorSaveStatus.textContent = "已保存";
-  renderHome();
-  renderEntries();
+  if (!isMobileLayout()) {
+    renderHome();
+    renderEntries();
+  } else if (state.mobileTab === "home") {
+    renderHome();
+  } else if (state.mobileTab === "diary") {
+    renderEntries();
+  }
 }
 
 function setupSpeechRecognition() {
@@ -1684,26 +1721,60 @@ function toggleTranscript(blockId) {
 }
 
 async function copyTranscript(blockId, button) {
-  const block = activeEntry()?.blocks.find((item) => item.id === blockId);
-  const text = block?.transcriptEdited || block?.transcript || "";
-  if (!text.trim()) {
-    flashButtonLabel(button, "无转写");
-    return;
-  }
-  insertBlockAfter(blockId, "text", { text });
+  if (state.copyingTranscriptIds.has(blockId)) return;
+  state.copyingTranscriptIds.add(blockId);
+
   try {
-    if (navigator.clipboard?.writeText && window.isSecureContext) {
-      await navigator.clipboard.writeText(text);
-    } else if (!fallbackCopyText(text)) {
-      throw new Error("copy failed");
-    }
-    flashButtonLabel(button, "已插入");
-  } catch (error) {
-    if (fallbackCopyText(text)) {
-      flashButtonLabel(button, "已插入");
+    const entry = activeEntry();
+    const block = entry?.blocks.find((item) => item.id === blockId);
+    const text = block?.transcriptEdited || block?.transcript || "";
+    if (!text.trim()) {
+      flashButtonLabel(button, "无转写");
       return;
     }
-    flashButtonLabel(button, "已插入");
+
+    try {
+      if (navigator.clipboard?.writeText && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        fallbackCopyText(text);
+      }
+    } catch {
+      try {
+        fallbackCopyText(text);
+      } catch {
+        // Inserting an editable text block remains the primary action on iOS.
+      }
+    }
+
+    let insertedBlock = entry.blocks.find((item) => item.id === block.transcriptCopyBlockId);
+    let transcriptInserted = false;
+    if (!insertedBlock) {
+      insertedBlock = createBlock("text", {
+        text,
+        sourceTranscriptBlockId: blockId,
+        sourceTranscriptText: text
+      });
+      const audioIndex = entry.blocks.findIndex((item) => item.id === blockId);
+      entry.blocks.splice(audioIndex >= 0 ? audioIndex + 1 : entry.blocks.length, 0, insertedBlock);
+      block.transcriptCopyBlockId = insertedBlock.id;
+      transcriptInserted = true;
+    } else if (insertedBlock.text === insertedBlock.sourceTranscriptText && insertedBlock.text !== text) {
+      insertedBlock.text = text;
+      insertedBlock.sourceTranscriptText = text;
+      transcriptInserted = true;
+    }
+
+    if (transcriptInserted) {
+      state.activeBlockId = insertedBlock.id;
+      touchEntry(entry);
+      await saveActiveEntry();
+      render();
+      focusBlock(insertedBlock.id);
+    }
+    flashButtonLabel(el.blockList.querySelector(`[data-copy-transcript="${blockId}"]`) || button, transcriptInserted ? "已插入" : "已复制");
+  } finally {
+    state.copyingTranscriptIds.delete(blockId);
   }
 }
 
@@ -1758,7 +1829,7 @@ function bindEvents() {
 
   el.homeSearchBtn?.addEventListener("click", () => {
     state.mobileTab = "diary";
-    renderMobileView();
+    render();
     window.setTimeout(() => el.searchInput?.focus(), 60);
   });
 
@@ -1967,7 +2038,7 @@ function bindEvents() {
   document.querySelectorAll("[data-mobile-tab]").forEach((button) => {
     button.addEventListener("click", () => {
       state.mobileTab = button.dataset.mobileTab;
-      renderMobileView();
+      render();
       scrollPageTop();
     });
   });
@@ -2083,7 +2154,7 @@ async function init() {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("./sw.js?v=41").then((registration) => registration.update()).catch(() => {});
+  navigator.serviceWorker.register("./sw.js?v=42").then((registration) => registration.update()).catch(() => {});
 }
 
 init().catch((error) => {

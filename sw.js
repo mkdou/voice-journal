@@ -1,4 +1,4 @@
-const CACHE_NAME = "voice-journal-v41";
+const CACHE_NAME = "voice-journal-v42";
 const STATIC_ASSETS = ["./manifest.webmanifest?v=voice-v2", "./icon.svg?v=voice-v2"];
 
 self.addEventListener("install", (event) => {
@@ -8,7 +8,9 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.map((key) => caches.delete(key))))
+    caches.keys().then((keys) => Promise.all(
+      keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
+    ))
   );
   self.clients.claim();
 });
