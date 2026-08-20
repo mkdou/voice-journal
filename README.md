@@ -60,8 +60,11 @@ Vercel 环境变量：
 
 ```text
 DASHSCOPE_API_KEY=你的阿里云百炼 API Key
+DASHSCOPE_BASE_URL=创建 API Key 时显示的 OpenAI 兼容地址
 PUNCTUATION_MODEL=qwen-plus
 ALLOWED_ORIGIN=https://mkdou.github.io
 ```
+
+`DASHSCOPE_BASE_URL` 示例格式为 `https://你的专属地址.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`，不要在末尾添加 `/chat/completions`。
 
 整理成功后会写入该录音块的 `transcriptEdited`，后续点击“复制转写”会复制并插入带标点版本。

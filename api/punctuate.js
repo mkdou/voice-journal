@@ -32,7 +32,7 @@ export default async function handler(req, res) {
       return;
     }
 
-    const response = await fetch("https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", {
+    const response = await fetch(dashScopeChatCompletionsUrl(), {
       method: "POST",
       headers: {
         Authorization: `Bearer ${process.env.DASHSCOPE_API_KEY}`,
@@ -70,6 +70,12 @@ export default async function handler(req, res) {
   } catch (error) {
     res.status(500).json({ error: error.message || "整理标点失败。" });
   }
+}
+
+function dashScopeChatCompletionsUrl() {
+  const baseUrl = process.env.DASHSCOPE_BASE_URL
+    || "https://dashscope.aliyuncs.com/compatible-mode/v1";
+  return `${baseUrl.replace(/\/+$/, "")}/chat/completions`;
 }
 
 function setCorsHeaders(req, res) {
