@@ -50,7 +50,7 @@ const state = {
   dateEditingBlockId: null,
   recordingStartedAt: 0,
   timerId: null,
-  saveTimer: null,
+  saveTimers: new Map(),
   copyingTranscriptIds: new Set()
 };
 
@@ -141,6 +141,32 @@ function uid(prefix) {
 
 function nowISO() {
   return new Date().toISOString();
+}
+
+function rememberView() {
+  try {
+    sessionStorage.setItem("voiceJournalView", JSON.stringify({
+      tab: state.mobileTab,
+      entryId: state.activeEntryId
+    }));
+  } catch {
+    // Session restoration is optional when storage is unavailable.
+  }
+}
+
+function restoreView() {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem("voiceJournalView") || "null");
+    if (!saved) return;
+    if (saved.tab === "editor" && state.entries.some((entry) => entry.id === saved.entryId)) {
+      state.activeEntryId = saved.entryId;
+      state.mobileTab = "editor";
+      return;
+    }
+    if (["home", "diary", "settings"].includes(saved.tab)) state.mobileTab = saved.tab;
+  } catch {
+    // Ignore corrupt or unavailable session state.
+  }
 }
 
 function todayISO() {
@@ -390,6 +416,7 @@ async function loadData() {
   state.ideas = (await getAll("ideas")).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
   state.coverImages = (await getAll("coverImages")).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
   if (!state.activeEntryId) state.activeEntryId = state.entries[0]?.id || null;
+  restoreView();
   render();
 }
 
@@ -739,7 +766,7 @@ function renderBlock(block) {
   if (block.type === "image") {
     return `
       <section class="block image-block" data-block="${block.id}">
-        <img src="${block.src}" alt="${escapeHtml(block.caption || "日记图片")}" />
+        <img src="${block.src}" alt="${escapeHtml(block.caption || "日记图片")}" loading="lazy" decoding="async" />
         <div class="image-caption" contenteditable="true" data-caption="${block.id}">${escapeHtml(block.caption || "添加图片说明")}</div>
         ${menu}
       </section>
@@ -754,6 +781,15 @@ function renderBlock(block) {
       ${menu}
     </section>
   `;
+}
+
+function insertRenderedBlockAfter(anchorBlockId, block) {
+  const anchor = el.blockList.querySelector(`[data-block="${anchorBlockId}"]`);
+  if (!anchor) return false;
+  anchor.insertAdjacentHTML("afterend", renderBlock(block));
+  const inserted = anchor.nextElementSibling;
+  if (inserted) hydrateIcons(inserted);
+  return Boolean(inserted);
 }
 
 function renderAudioBlock(block, menu) {
@@ -1001,7 +1037,6 @@ function syncBlockDurationFromAudio(blockId, durationSeconds) {
   block.durationMs = actualMs;
   block.duration = formatDuration(actualMs);
   touchEntry(entry);
-  queueSave();
   const total = el.blockList.querySelector(`[data-player="${blockId}"] .player-time:last-child`);
   const progress = el.blockList.querySelector(`[data-progress="${blockId}"]`);
   if (total) total.textContent = block.duration;
@@ -1118,7 +1153,6 @@ function updateBlock(blockId, patch) {
   if (!entry || !block) return;
   Object.assign(block, patch);
   touchEntry(entry);
-  queueSave();
 }
 
 function editableText(node) {
@@ -1159,7 +1193,6 @@ async function deleteBlock(blockId) {
   if (state.activeBlockId === blockId) state.activeBlockId = entry.blocks[0]?.id || null;
   touchEntry(entry);
   render();
-  queueSave();
 }
 
 function deleteBlockFromKeyboard(blockId) {
@@ -1179,7 +1212,6 @@ function deleteBlockFromKeyboard(blockId) {
   if (focusTarget?.type === "text" || focusTarget?.type === "todo" || focusTarget?.type === "quote") {
     focusBlock(focusTarget.id);
   }
-  queueSave();
   return true;
 }
 
@@ -1194,6 +1226,7 @@ async function deleteEntry(entryId) {
   if (state.activeEntryId === entryId) {
     state.activeEntryId = state.entries[0]?.id || null;
     state.mobileTab = "diary";
+    rememberView();
   }
   if (!state.entries.length) {
     const fresh = createEntry();
@@ -1207,24 +1240,35 @@ async function deleteEntry(entryId) {
 function touchEntry(entry) {
   entry.updatedAt = nowISO();
   if (el.editorSaveStatus) el.editorSaveStatus.textContent = "保存中";
-  queueSave();
+  queueSave(entry);
 }
 
-function queueSave() {
-  window.clearTimeout(state.saveTimer);
+function queueSave(entry = activeEntry()) {
+  if (!entry) return;
+  const currentTimer = state.saveTimers.get(entry.id);
+  if (currentTimer) window.clearTimeout(currentTimer);
   el.saveStatus.textContent = "正在自动保存...";
-  state.saveTimer = window.setTimeout(saveActiveEntry, 260);
+  const timer = window.setTimeout(() => {
+    state.saveTimers.delete(entry.id);
+    persistEntry(entry).catch((error) => reportActionError("自动保存失败，请稍后重试", error));
+  }, 420);
+  state.saveTimers.set(entry.id, timer);
 }
 
 async function saveActiveEntry() {
-  window.clearTimeout(state.saveTimer);
-  state.saveTimer = null;
   const entry = activeEntry();
   if (!entry) return;
+  const currentTimer = state.saveTimers.get(entry.id);
+  if (currentTimer) window.clearTimeout(currentTimer);
+  state.saveTimers.delete(entry.id);
+  await persistEntry(entry);
+}
+
+async function persistEntry(entry) {
   await putEntry(entry);
   state.entries = state.entries.map((item) => item.id === entry.id ? entry : item).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
   el.saveStatus.textContent = `已自动保存 ${formatTime(new Date())}`;
-  if (el.editorSaveStatus) el.editorSaveStatus.textContent = "已保存";
+  if (el.editorSaveStatus && state.activeEntryId === entry.id) el.editorSaveStatus.textContent = "已保存";
   if (!isMobileLayout()) {
     renderHome();
     renderEntries();
@@ -1233,6 +1277,16 @@ async function saveActiveEntry() {
   } else if (state.mobileTab === "diary") {
     renderEntries();
   }
+}
+
+function reportActionError(message, error) {
+  console.error(message, error);
+  el.saveStatus.textContent = message;
+  if (el.editorSaveStatus) el.editorSaveStatus.textContent = "操作失败";
+}
+
+function runAction(action, message = "操作失败，请重试") {
+  Promise.resolve(action).catch((error) => reportActionError(message, error));
 }
 
 function setupSpeechRecognition() {
@@ -1439,6 +1493,38 @@ function blobToDataUrl(blob) {
   });
 }
 
+function loadImageBlob(blob) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("无法读取这张照片"));
+    };
+    image.src = url;
+  });
+}
+
+async function optimizedImageDataUrl(file) {
+  try {
+    const image = await loadImageBlob(file);
+    const maxSide = 1600;
+    const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.82));
+    return blob ? await blobToDataUrl(blob) : await blobToDataUrl(file);
+  } catch {
+    return blobToDataUrl(file);
+  }
+}
+
 async function handleImageFiles(files, anchorBlockId) {
   const selected = Array.from(files || []).filter((file) => !file.type || file.type.startsWith("image/"));
   if (!selected.length) return;
@@ -1446,7 +1532,7 @@ async function handleImageFiles(files, anchorBlockId) {
   if (!entry) return;
   const imageBlocks = [];
   for (const file of selected) {
-    const src = await blobToDataUrl(file);
+    const src = await optimizedImageDataUrl(file);
     imageBlocks.push(createBlock("image", { src, caption: "" }));
   }
   const anchorIndex = entry.blocks.findIndex((block) => block.id === anchorBlockId);
@@ -1560,7 +1646,6 @@ function exitEditing() {
   state.editing = false;
   document.body.classList.remove("editing");
   cleanupEmptyTextBlocks();
-  queueSave();
 }
 
 function cleanupEmptyTextBlocks() {
@@ -1799,7 +1884,7 @@ function toggleTranscript(blockId) {
   }
 }
 
-async function copyTranscript(blockId, button) {
+function copyTranscript(blockId, button) {
   if (state.copyingTranscriptIds.has(blockId)) return;
   state.copyingTranscriptIds.add(blockId);
 
@@ -1807,27 +1892,24 @@ async function copyTranscript(blockId, button) {
     const entry = activeEntry();
     const block = entry?.blocks.find((item) => item.id === blockId);
     const text = block?.transcriptEdited || block?.transcript || "";
-    if (!text.trim()) {
+    if (!entry || !block || !text.trim()) {
       flashButtonLabel(button, "无转写");
       return;
     }
 
     try {
       if (navigator.clipboard?.writeText && window.isSecureContext) {
-        await navigator.clipboard.writeText(text);
+        navigator.clipboard.writeText(text).catch(() => {});
       } else {
         fallbackCopyText(text);
       }
     } catch {
-      try {
-        fallbackCopyText(text);
-      } catch {
-        // Inserting an editable text block remains the primary action on iOS.
-      }
+      // Inserting an editable text block remains the primary action on iOS.
     }
 
     let insertedBlock = entry.blocks.find((item) => item.id === block.transcriptCopyBlockId);
     let transcriptInserted = false;
+    let insertedNow = false;
     if (!insertedBlock) {
       insertedBlock = createBlock("text", {
         text,
@@ -1838,6 +1920,7 @@ async function copyTranscript(blockId, button) {
       entry.blocks.splice(audioIndex >= 0 ? audioIndex + 1 : entry.blocks.length, 0, insertedBlock);
       block.transcriptCopyBlockId = insertedBlock.id;
       transcriptInserted = true;
+      insertedNow = true;
     } else if (insertedBlock.text === insertedBlock.sourceTranscriptText && insertedBlock.text !== text) {
       insertedBlock.text = text;
       insertedBlock.sourceTranscriptText = text;
@@ -1847,11 +1930,23 @@ async function copyTranscript(blockId, button) {
     if (transcriptInserted) {
       state.activeBlockId = insertedBlock.id;
       touchEntry(entry);
-      await saveActiveEntry();
-      render();
+      if (insertedNow) {
+        if (!insertRenderedBlockAfter(blockId, insertedBlock)) renderEditor();
+      } else {
+        const textNode = el.blockList.querySelector(`[data-text-block="${insertedBlock.id}"]`);
+        if (textNode) textNode.textContent = insertedBlock.text;
+      }
       focusBlock(insertedBlock.id);
     }
-    flashButtonLabel(el.blockList.querySelector(`[data-copy-transcript="${blockId}"]`) || button, transcriptInserted ? "已插入" : "已复制");
+    const currentButton = el.blockList.querySelector(`[data-copy-transcript="${blockId}"]`) || button;
+    if (transcriptInserted && currentButton) {
+      currentButton.textContent = "已插入";
+    } else {
+      flashButtonLabel(currentButton, "已复制");
+    }
+  } catch (error) {
+    reportActionError("复制转写失败，请重试", error);
+    flashButtonLabel(button, "请重试");
   } finally {
     state.copyingTranscriptIds.delete(blockId);
   }
@@ -1880,6 +1975,7 @@ function openEntryEditor(entryId) {
   state.activeBlockId = entry?.blocks[entry.blocks.length - 1]?.id || null;
   state.pendingImageAnchorId = null;
   state.mobileTab = "editor";
+  rememberView();
   render();
 }
 
@@ -1888,19 +1984,25 @@ async function startHomeRecording() {
   state.activeEntryId = entry.id;
   state.mobileTab = "editor";
   state.activeBlockId = entry.blocks[entry.blocks.length - 1]?.id || null;
+  rememberView();
   render();
   await startRecording();
 }
 
 function bindEvents() {
   el.newEntryBtn.addEventListener("click", async () => {
-    const entry = createEntry(state.activeFolderId === "all" ? "daily" : state.activeFolderId);
-    state.entries.unshift(entry);
-    state.activeEntryId = entry.id;
-    await putEntry(entry);
-    state.mobileTab = "editor";
-    render();
-    el.titleInput.focus();
+    try {
+      const entry = createEntry(state.activeFolderId === "all" ? "daily" : state.activeFolderId);
+      state.entries.unshift(entry);
+      state.activeEntryId = entry.id;
+      await putEntry(entry);
+      state.mobileTab = "editor";
+      rememberView();
+      render();
+      el.titleInput.focus();
+    } catch (error) {
+      reportActionError("新建日记失败，请重试", error);
+    }
   });
 
   el.homeRecordBtn?.addEventListener("click", () => {
@@ -1911,6 +2013,7 @@ function bindEvents() {
 
   el.homeSearchBtn?.addEventListener("click", () => {
     state.mobileTab = "diary";
+    rememberView();
     render();
     window.setTimeout(() => el.searchInput?.focus(), 60);
   });
@@ -1947,7 +2050,7 @@ function bindEvents() {
     if (deleteButton) {
       event.preventDefault();
       event.stopPropagation();
-      deleteEntry(deleteButton.dataset.deleteEntry);
+      runAction(deleteEntry(deleteButton.dataset.deleteEntry), "删除日记失败，请重试");
       return;
     }
     const row = event.target.closest(".entry-row");
@@ -2093,7 +2196,7 @@ function bindEvents() {
     }
     const deleteButton = event.target.closest("[data-delete-block]");
     if (!deleteButton) return;
-    if (confirm("删除这个块吗？")) deleteBlock(deleteButton.dataset.deleteBlock);
+    if (confirm("删除这个块吗？")) runAction(deleteBlock(deleteButton.dataset.deleteBlock), "删除内容失败，请重试");
   });
 
   el.blockList.addEventListener("input", (event) => {
@@ -2120,6 +2223,7 @@ function bindEvents() {
   document.querySelectorAll("[data-mobile-tab]").forEach((button) => {
     button.addEventListener("click", () => {
       state.mobileTab = button.dataset.mobileTab;
+      rememberView();
       render();
       scrollPageTop();
     });
@@ -2129,11 +2233,15 @@ function bindEvents() {
     const anchorBlockId = state.pendingImageAnchorId;
     state.pendingImageAnchorId = null;
     el.imagePicker.value = "";
-    await handleImageFiles(files, anchorBlockId);
+    try {
+      await handleImageFiles(files, anchorBlockId);
+    } catch (error) {
+      reportActionError("照片添加失败，请减少数量后重试", error);
+    }
   });
-  el.coverPicker.addEventListener("change", () => handleCoverFile(el.coverPicker.files[0]));
+  el.coverPicker.addEventListener("change", () => runAction(handleCoverFile(el.coverPicker.files[0]), "封面更换失败，请重试"));
   el.coverLibraryPicker?.addEventListener("change", () => {
-    handleCoverLibraryFiles(el.coverLibraryPicker.files);
+    runAction(handleCoverLibraryFiles(el.coverLibraryPicker.files), "备用封面添加失败，请重试");
     el.coverLibraryPicker.value = "";
   });
   el.coverLibraryBtn?.addEventListener("click", () => el.coverLibraryPicker?.click());
@@ -2149,7 +2257,7 @@ function bindEvents() {
   el.deleteEntryBtn?.addEventListener("click", (event) => {
     event.stopPropagation();
     const entry = activeEntry();
-    if (entry) deleteEntry(entry.id);
+    if (entry) runAction(deleteEntry(entry.id), "删除日记失败，请重试");
   });
   el.sheetBackdrop.addEventListener("click", closeInsertSheet);
   el.insertSheet.addEventListener("click", (event) => {
@@ -2243,8 +2351,13 @@ async function init() {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("./sw.js?v=45").then((registration) => registration.update()).catch(() => {});
+  navigator.serviceWorker.register("./sw.js?v=46").then((registration) => registration.update()).catch(() => {});
 }
+
+window.addEventListener("unhandledrejection", (event) => {
+  event.preventDefault();
+  reportActionError("操作未完成，请重试", event.reason);
+});
 
 init().catch((error) => {
   console.error(error);
