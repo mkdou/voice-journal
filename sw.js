@@ -1,10 +1,10 @@
-const CACHE_NAME = "voice-journal-v48";
+const CACHE_NAME = "voice-journal-v49";
 const STATIC_ASSETS = [
-  "./manifest.webmanifest?v=voice-v3",
-  "./icon.svg?v=voice-v3",
-  "./icon-192.png?v=voice-v3",
-  "./icon-512.png?v=voice-v3",
-  "./apple-touch-icon.png?v=voice-v3"
+  "./manifest.webmanifest?v=voice-v4",
+  "./icon.svg?v=voice-v4",
+  "./icon-192.png?v=voice-v4",
+  "./icon-512.png?v=voice-v4",
+  "./apple-touch-icon.png?v=voice-v4"
 ];
 
 self.addEventListener("install", (event) => {
