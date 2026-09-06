@@ -1532,49 +1532,118 @@ function backupTimestamp() {
   return `${date}-${time}`;
 }
 
-async function buildFullBackup() {
+const BACKUP_MAGIC = "VJBACKUP2\n";
+
+async function buildFullBackupArchive() {
   await Promise.all(state.entries.map((entry) => putEntry(entry)));
-  const [entries, ideas, coverImages, audioRecords] = await Promise.all([
-    getAll("entries"),
-    getAll("ideas"),
-    getAll("coverImages"),
-    getAll("audioBlobs")
-  ]);
-  const audioBlobs = [];
+  const entries = state.entries;
+  const ideas = state.ideas;
+  const coverImages = state.coverImages;
+  const audioRecords = await getAll("audioBlobs");
+
+  const assets = [];
+  const assetParts = [];
+  let assetOffset = 0;
+  const addAsset = (blob, kind) => {
+    const id = `asset-${assets.length + 1}`;
+    const normalizedBlob = blob instanceof Blob ? blob : new Blob([blob]);
+    assets.push({
+      id,
+      kind,
+      mimeType: normalizedBlob.type || "application/octet-stream",
+      size: normalizedBlob.size,
+      offset: assetOffset
+    });
+    assetParts.push(normalizedBlob);
+    assetOffset += normalizedBlob.size;
+    return id;
+  };
+  const addDataUrlAsset = (dataUrl, kind) => addAsset(dataUrlToBlob(dataUrl), kind);
+
+  const archivedEntries = [];
+  for (let entryIndex = 0; entryIndex < entries.length; entryIndex += 1) {
+    const entry = entries[entryIndex];
+    setBackupBusy(true, `正在整理日记 ${entryIndex + 1}/${entries.length}…`);
+    const archivedEntry = { ...entry, blocks: [] };
+    if (String(entry.coverImage || "").startsWith("data:")) {
+      archivedEntry.coverAssetId = addDataUrlAsset(entry.coverImage, "entry-cover");
+      archivedEntry.coverImage = "";
+    }
+    for (const block of entry.blocks || []) {
+      const archivedBlock = { ...block };
+      if (String(block.src || "").startsWith("data:")) {
+        archivedBlock.imageAssetId = addDataUrlAsset(block.src, "entry-image");
+        archivedBlock.src = "";
+      }
+      if (String(block.audioDataUrl || "").startsWith("data:")) {
+        archivedBlock.audioDataAssetId = addDataUrlAsset(block.audioDataUrl, "legacy-audio");
+        archivedBlock.audioDataUrl = "";
+      }
+      archivedEntry.blocks.push(archivedBlock);
+    }
+    archivedEntries.push(archivedEntry);
+  }
+
+  const archivedCovers = [];
+  for (let index = 0; index < coverImages.length; index += 1) {
+    const image = coverImages[index];
+    setBackupBusy(true, `正在整理备用封面 ${index + 1}/${coverImages.length}…`);
+    const archivedImage = { ...image };
+    if (String(image.src || "").startsWith("data:")) {
+      archivedImage.assetId = addDataUrlAsset(image.src, "cover-library");
+      archivedImage.src = "";
+    }
+    archivedCovers.push(archivedImage);
+  }
+
+  const archivedAudio = [];
   for (let index = 0; index < audioRecords.length; index += 1) {
     const record = audioRecords[index];
     setBackupBusy(true, `正在整理原始录音 ${index + 1}/${audioRecords.length}…`);
-    const dataUrl = record.blob instanceof Blob
-      ? await blobToDataUrl(record.blob)
-      : String(record.dataUrl || "");
-    audioBlobs.push({
+    const blob = record.blob instanceof Blob ? record.blob : dataUrlToBlob(record.dataUrl || "");
+    archivedAudio.push({
       id: record.id,
-      mimeType: record.mimeType || record.blob?.type || "application/octet-stream",
-      size: record.size || record.blob?.size || 0,
+      mimeType: record.mimeType || blob.type || "application/octet-stream",
+      size: record.size || blob.size || 0,
       createdAt: record.createdAt || "",
-      dataUrl
+      assetId: addAsset(blob, "audio")
     });
   }
-  return {
-    format: "voice-journal-full-backup",
-    version: 1,
+
+  const manifest = {
+    format: "voice-journal-archive",
+    version: 2,
     exportedAt: nowISO(),
-    data: { entries, ideas, coverImages, audioBlobs },
+    assets,
+    data: {
+      entries: archivedEntries,
+      ideas,
+      coverImages: archivedCovers,
+      audioBlobs: archivedAudio
+    },
     preferences: {
       syncEmail: state.syncEmail,
       coverRotation: localStorage.getItem("voiceJournalCoverRotation") || "0"
     }
+  };
+  const manifestBytes = new TextEncoder().encode(JSON.stringify(manifest));
+  const header = `${BACKUP_MAGIC}${String(manifestBytes.byteLength).padStart(12, "0")}\n`;
+  return {
+    blob: new Blob([header, manifestBytes, ...assetParts], { type: "application/octet-stream" }),
+    manifest
   };
 }
 
 async function exportFullBackup() {
   if (state.backupBusy) return;
   setBackupBusy(true, "正在整理日记、图片和录音，请不要关闭页面…");
+  if (el.coverLibraryList) el.coverLibraryList.innerHTML = "";
   try {
-    const backup = await buildFullBackup();
-    const json = JSON.stringify(backup);
-    const filename = `voice-journal-backup-${backupTimestamp()}.json`;
-    const file = new File([json], filename, { type: "application/json" });
+    await new Promise((resolve) => window.requestAnimationFrame(resolve));
+    const archive = await buildFullBackupArchive();
+    const backup = archive.manifest;
+    const filename = `voice-journal-backup-${backupTimestamp()}.vjournal`;
+    const file = new File([archive.blob], filename, { type: "application/octet-stream" });
     if (navigator.share && navigator.canShare?.({ files: [file] })) {
       await navigator.share({
         files: [file],
@@ -1599,7 +1668,70 @@ async function exportFullBackup() {
     }
     console.error(error);
     setBackupBusy(false, `导出失败：${error?.message || "请重试"}`);
+  } finally {
+    renderCoverLibrary();
   }
+}
+
+async function readBackupFile(file) {
+  const prefix = await fileToText(file.slice(0, 64));
+  if (!prefix.startsWith(BACKUP_MAGIC)) {
+    return { backup: JSON.parse(await fileToText(file)), archive: null };
+  }
+  const match = /^VJBACKUP2\n(\d{12})\n/.exec(prefix);
+  if (!match) throw new Error("备份文件头损坏");
+  const headerSize = match[0].length;
+  const manifestSize = Number(match[1]);
+  if (!Number.isFinite(manifestSize) || manifestSize <= 0 || headerSize + manifestSize > file.size) {
+    throw new Error("备份文件不完整");
+  }
+  const backup = JSON.parse(await fileToText(file.slice(headerSize, headerSize + manifestSize)));
+  return {
+    backup,
+    archive: { file, dataStart: headerSize + manifestSize }
+  };
+}
+
+function getArchivedAssetBlob(backup, archive, assetId) {
+  if (!archive || !assetId) return null;
+  const asset = backup.assets?.find((item) => item.id === assetId);
+  if (!asset || !Number.isFinite(asset.offset) || !Number.isFinite(asset.size)) {
+    throw new Error("备份中的图片或录音索引损坏");
+  }
+  const start = archive.dataStart + asset.offset;
+  const end = start + asset.size;
+  if (start < archive.dataStart || end > archive.file.size) throw new Error("备份文件缺少部分图片或录音");
+  return archive.file.slice(start, end, asset.mimeType || "application/octet-stream");
+}
+
+async function restoreEntryAssets(entry, backup, archive) {
+  if (!archive) return entry;
+  const restored = { ...entry, blocks: [] };
+  if (entry.coverAssetId) {
+    restored.coverImage = await blobToDataUrl(getArchivedAssetBlob(backup, archive, entry.coverAssetId));
+    delete restored.coverAssetId;
+  }
+  for (const block of entry.blocks || []) {
+    const restoredBlock = { ...block };
+    if (block.imageAssetId) {
+      restoredBlock.src = await blobToDataUrl(getArchivedAssetBlob(backup, archive, block.imageAssetId));
+      delete restoredBlock.imageAssetId;
+    }
+    if (block.audioDataAssetId) {
+      restoredBlock.audioDataUrl = await blobToDataUrl(getArchivedAssetBlob(backup, archive, block.audioDataAssetId));
+      delete restoredBlock.audioDataAssetId;
+    }
+    restored.blocks.push(restoredBlock);
+  }
+  return restored;
+}
+
+async function restoreCoverAsset(image, backup, archive) {
+  if (!archive || !image.assetId) return image;
+  const restored = { ...image };
+  restored.src = await blobToDataUrl(getArchivedAssetBlob(backup, archive, image.assetId));
+  delete restored.assetId;
+  return restored;
 }
 
 function isNewerRecord(candidate, existing) {
@@ -1613,8 +1745,9 @@ async function importFullBackup(file) {
   if (!file || state.backupBusy) return;
   setBackupBusy(true, "正在读取备份文件…");
   try {
-    const backup = JSON.parse(await fileToText(file));
-    if (backup?.format !== "voice-journal-full-backup" || !backup.data) {
+    const parsed = await readBackupFile(file);
+    const { backup, archive } = parsed;
+    if (!["voice-journal-full-backup", "voice-journal-archive"].includes(backup?.format) || !backup.data) {
       throw new Error("这不是 Voice Journal 完整备份文件");
     }
     const entries = Array.isArray(backup.data.entries) ? backup.data.entries : [];
@@ -1639,24 +1772,29 @@ async function importFullBackup(file) {
     const audioIds = new Set(existingAudio.map((item) => item.id));
 
     let importedEntries = 0;
-    for (const entry of entries) {
+    for (let index = 0; index < entries.length; index += 1) {
+      const entry = entries[index];
       if (!entry?.id || !isNewerRecord(entry, entryMap.get(entry.id))) continue;
-      await putEntry(entry);
+      setBackupBusy(true, `正在恢复日记 ${index + 1}/${entries.length}…`);
+      await putEntry(await restoreEntryAssets(entry, backup, archive));
       importedEntries += 1;
     }
     for (const idea of ideas) {
       if (idea?.id && isNewerRecord(idea, ideaMap.get(idea.id))) await putIdea(idea);
     }
     for (const image of coverImages) {
-      if (!image?.id || !image.src || coverIds.has(image.id)) continue;
-      await putCoverImage(image);
+      if (!image?.id || (!image.src && !image.assetId) || coverIds.has(image.id)) continue;
+      await putCoverImage(await restoreCoverAsset(image, backup, archive));
     }
     let importedAudio = 0;
     for (let index = 0; index < audioBlobs.length; index += 1) {
       const record = audioBlobs[index];
-      if (!record?.id || !record.dataUrl || audioIds.has(record.id)) continue;
+      if (!record?.id || audioIds.has(record.id)) continue;
       setBackupBusy(true, `正在恢复原始录音 ${index + 1}/${audioBlobs.length}…`);
-      const blob = dataUrlToBlob(record.dataUrl);
+      const blob = archive
+        ? getArchivedAssetBlob(backup, archive, record.assetId)
+        : dataUrlToBlob(record.dataUrl);
+      if (!blob) throw new Error("备份中缺少原始录音文件");
       await putAudioRecord({
         id: record.id,
         blob,
@@ -2547,7 +2685,7 @@ async function init() {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("./sw.js?v=50").then((registration) => registration.update()).catch(() => {});
+  navigator.serviceWorker.register("./sw.js?v=51").then((registration) => registration.update()).catch(() => {});
 }
 
 window.addEventListener("unhandledrejection", (event) => {
