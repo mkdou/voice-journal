@@ -10,7 +10,7 @@
     <link rel="manifest" href="manifest.webmanifest?v=voice-v4" />
     <link rel="icon" href="icon.svg?v=voice-v4" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png?v=voice-v4" />
-    <link rel="stylesheet" href="styles.css?v=craft-v27" />
+    <link rel="stylesheet" href="styles.css?v=craft-v28" />
   </head>
   <body>
     <div class="app-shell">
@@ -161,13 +161,22 @@
       <section class="mobile-only-panel mobile-page" data-mobile-page="settings">
         <div class="mobile-panel-card">
           <h2>设置</h2>
-          <p>本机内容会自动保存。跨手机和电脑同步需要登录邮箱并接入云端同步服务。</p>
+          <p>内容会自动保存在当前设备。此版本尚未接入云端同步，重新添加桌面图标可能产生独立的本机数据。</p>
           <label class="email-login">
-            <span>邮箱</span>
+            <span>本机邮箱标记（不代表已同步）</span>
             <input id="syncEmailInput" type="email" placeholder="name@example.com" autocomplete="email" />
           </label>
-          <button class="panel-action" id="saveEmailBtn" type="button">保存邮箱</button>
-          <div class="sync-note" id="syncStatus">未登录。当前数据仍保存在本机。</div>
+          <button class="panel-action" id="saveEmailBtn" type="button">保存本机邮箱</button>
+          <div class="sync-note" id="syncStatus">未设置邮箱标记。当前数据只保存在这台设备。</div>
+          <div class="backup-panel">
+            <h3>本机数据备份</h3>
+            <p>完整备份包含日记、原始录音、图片、备用封面和灵感，可用来迁移桌面图标。备份文件未加密，请妥善保存。</p>
+            <div class="backup-actions">
+              <button class="panel-action backup-export-action" id="exportBackupBtn" type="button">导出全部数据</button>
+              <button class="panel-action subtle-action" id="importBackupBtn" type="button">合并导入备份</button>
+            </div>
+            <div class="sync-note backup-note" id="backupStatus">建议定期导出一份完整备份。</div>
+          </div>
           <div class="cover-library">
             <h3>备用封面库</h3>
             <p>一次上传多张喜欢的照片。以后新建日记时，会自动轮番挑一张当封面。</p>
@@ -225,6 +234,7 @@
     <input id="imagePicker" type="file" accept="image/*" multiple hidden />
     <input id="coverPicker" type="file" accept="image/*" hidden />
     <input id="coverLibraryPicker" type="file" accept="image/*" multiple hidden />
-    <script src="app.js?v=craft-v27"></script>
+    <input id="backupPicker" type="file" accept="application/json,.json" hidden />
+    <script src="app.js?v=craft-v28"></script>
   </body>
 </html>

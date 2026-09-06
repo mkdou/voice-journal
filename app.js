@@ -51,7 +51,8 @@ const state = {
   recordingStartedAt: 0,
   timerId: null,
   saveTimers: new Map(),
-  copyingTranscriptIds: new Set()
+  copyingTranscriptIds: new Set(),
+  backupBusy: false
 };
 
 const el = {
@@ -102,7 +103,11 @@ const el = {
   ideaList: document.querySelector("#ideaList"),
   syncEmailInput: document.querySelector("#syncEmailInput"),
   saveEmailBtn: document.querySelector("#saveEmailBtn"),
-  syncStatus: document.querySelector("#syncStatus")
+  syncStatus: document.querySelector("#syncStatus"),
+  exportBackupBtn: document.querySelector("#exportBackupBtn"),
+  importBackupBtn: document.querySelector("#importBackupBtn"),
+  backupPicker: document.querySelector("#backupPicker"),
+  backupStatus: document.querySelector("#backupStatus")
 };
 
 const icons = {
@@ -933,8 +938,8 @@ function renderSyncState() {
   if (!el.syncEmailInput || !el.syncStatus) return;
   el.syncEmailInput.value = state.syncEmail;
   el.syncStatus.textContent = state.syncEmail
-    ? `已保存邮箱：${state.syncEmail}。下一步接入云端同步后，这个邮箱会用于电脑和手机互通。`
-    : "未登录。当前数据仍保存在本机。";
+    ? `已在本机保存邮箱标记：${state.syncEmail}。当前没有云端同步，其他图标或设备不会自动取得这里的数据。`
+    : "未设置邮箱标记。当前数据只保存在这台设备。";
   renderCoverLibrary();
 }
 
@@ -1491,6 +1496,192 @@ function blobToDataUrl(blob) {
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(blob);
   });
+}
+
+function fileToText(file) {
+  if (typeof file.text === "function") return file.text();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(file);
+  });
+}
+
+function dataUrlToBlob(dataUrl) {
+  const match = /^data:([^;,]*)(;base64)?,(.*)$/s.exec(String(dataUrl || ""));
+  if (!match) throw new Error("录音备份格式不正确");
+  const mimeType = match[1] || "application/octet-stream";
+  const binary = match[2] ? atob(match[3]) : decodeURIComponent(match[3]);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return new Blob([bytes], { type: mimeType });
+}
+
+function setBackupBusy(busy, message) {
+  state.backupBusy = busy;
+  if (el.exportBackupBtn) el.exportBackupBtn.disabled = busy;
+  if (el.importBackupBtn) el.importBackupBtn.disabled = busy;
+  if (el.backupStatus && message) el.backupStatus.textContent = message;
+}
+
+function backupTimestamp() {
+  const now = new Date();
+  const date = localDateISO(now);
+  const time = `${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
+  return `${date}-${time}`;
+}
+
+async function buildFullBackup() {
+  await Promise.all(state.entries.map((entry) => putEntry(entry)));
+  const [entries, ideas, coverImages, audioRecords] = await Promise.all([
+    getAll("entries"),
+    getAll("ideas"),
+    getAll("coverImages"),
+    getAll("audioBlobs")
+  ]);
+  const audioBlobs = [];
+  for (let index = 0; index < audioRecords.length; index += 1) {
+    const record = audioRecords[index];
+    setBackupBusy(true, `正在整理原始录音 ${index + 1}/${audioRecords.length}…`);
+    const dataUrl = record.blob instanceof Blob
+      ? await blobToDataUrl(record.blob)
+      : String(record.dataUrl || "");
+    audioBlobs.push({
+      id: record.id,
+      mimeType: record.mimeType || record.blob?.type || "application/octet-stream",
+      size: record.size || record.blob?.size || 0,
+      createdAt: record.createdAt || "",
+      dataUrl
+    });
+  }
+  return {
+    format: "voice-journal-full-backup",
+    version: 1,
+    exportedAt: nowISO(),
+    data: { entries, ideas, coverImages, audioBlobs },
+    preferences: {
+      syncEmail: state.syncEmail,
+      coverRotation: localStorage.getItem("voiceJournalCoverRotation") || "0"
+    }
+  };
+}
+
+async function exportFullBackup() {
+  if (state.backupBusy) return;
+  setBackupBusy(true, "正在整理日记、图片和录音，请不要关闭页面…");
+  try {
+    const backup = await buildFullBackup();
+    const json = JSON.stringify(backup);
+    const filename = `voice-journal-backup-${backupTimestamp()}.json`;
+    const file = new File([json], filename, { type: "application/json" });
+    if (navigator.share && navigator.canShare?.({ files: [file] })) {
+      await navigator.share({
+        files: [file],
+        title: "Voice Journal 完整备份"
+      });
+      setBackupBusy(false, `已生成完整备份：${backup.data.entries.length} 篇日记、${backup.data.audioBlobs.length} 段原始录音、${backup.data.coverImages.length} 张备用封面。`);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 30000);
+    setBackupBusy(false, `完整备份已下载：${backup.data.entries.length} 篇日记、${backup.data.audioBlobs.length} 段原始录音、${backup.data.coverImages.length} 张备用封面。`);
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      setBackupBusy(false, "已取消导出，原有数据没有变化。");
+      return;
+    }
+    console.error(error);
+    setBackupBusy(false, `导出失败：${error?.message || "请重试"}`);
+  }
+}
+
+function isNewerRecord(candidate, existing) {
+  if (!existing) return true;
+  const candidateTime = new Date(candidate.updatedAt || candidate.createdAt || 0).getTime();
+  const existingTime = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
+  return candidateTime >= existingTime;
+}
+
+async function importFullBackup(file) {
+  if (!file || state.backupBusy) return;
+  setBackupBusy(true, "正在读取备份文件…");
+  try {
+    const backup = JSON.parse(await fileToText(file));
+    if (backup?.format !== "voice-journal-full-backup" || !backup.data) {
+      throw new Error("这不是 Voice Journal 完整备份文件");
+    }
+    const entries = Array.isArray(backup.data.entries) ? backup.data.entries : [];
+    const ideas = Array.isArray(backup.data.ideas) ? backup.data.ideas : [];
+    const coverImages = Array.isArray(backup.data.coverImages) ? backup.data.coverImages : [];
+    const audioBlobs = Array.isArray(backup.data.audioBlobs) ? backup.data.audioBlobs : [];
+    if (!entries.length && !ideas.length && !coverImages.length && !audioBlobs.length) {
+      throw new Error("备份文件里没有可导入的内容");
+    }
+    const approved = confirm(`合并导入这份备份？\n\n${entries.length} 篇日记\n${audioBlobs.length} 段原始录音\n${coverImages.length} 张备用封面\n\n当前图标里的内容不会被清空。`);
+    if (!approved) {
+      setBackupBusy(false, "已取消导入，原有数据没有变化。");
+      return;
+    }
+
+    const [existingEntries, existingIdeas, existingCovers, existingAudio] = await Promise.all([
+      getAll("entries"), getAll("ideas"), getAll("coverImages"), getAll("audioBlobs")
+    ]);
+    const entryMap = new Map(existingEntries.map((item) => [item.id, item]));
+    const ideaMap = new Map(existingIdeas.map((item) => [item.id, item]));
+    const coverIds = new Set(existingCovers.map((item) => item.id));
+    const audioIds = new Set(existingAudio.map((item) => item.id));
+
+    let importedEntries = 0;
+    for (const entry of entries) {
+      if (!entry?.id || !isNewerRecord(entry, entryMap.get(entry.id))) continue;
+      await putEntry(entry);
+      importedEntries += 1;
+    }
+    for (const idea of ideas) {
+      if (idea?.id && isNewerRecord(idea, ideaMap.get(idea.id))) await putIdea(idea);
+    }
+    for (const image of coverImages) {
+      if (!image?.id || !image.src || coverIds.has(image.id)) continue;
+      await putCoverImage(image);
+    }
+    let importedAudio = 0;
+    for (let index = 0; index < audioBlobs.length; index += 1) {
+      const record = audioBlobs[index];
+      if (!record?.id || !record.dataUrl || audioIds.has(record.id)) continue;
+      setBackupBusy(true, `正在恢复原始录音 ${index + 1}/${audioBlobs.length}…`);
+      const blob = dataUrlToBlob(record.dataUrl);
+      await putAudioRecord({
+        id: record.id,
+        blob,
+        mimeType: record.mimeType || blob.type,
+        size: record.size || blob.size,
+        createdAt: record.createdAt || nowISO()
+      });
+      importedAudio += 1;
+    }
+    if (!state.syncEmail && backup.preferences?.syncEmail) {
+      state.syncEmail = backup.preferences.syncEmail;
+      localStorage.setItem("voiceJournalSyncEmail", state.syncEmail);
+    }
+    state.activeEntryId = null;
+    await loadData();
+    state.mobileTab = "settings";
+    rememberView();
+    render();
+    setBackupBusy(false, `导入完成：恢复 ${importedEntries} 篇日记、${importedAudio} 段原始录音；备用封面现在共 ${state.coverImages.length} 张。`);
+  } catch (error) {
+    console.error(error);
+    setBackupBusy(false, `导入失败：${error?.message || "请确认文件完整后重试"}`);
+  } finally {
+    if (el.backupPicker) el.backupPicker.value = "";
+  }
 }
 
 function loadImageBlob(blob) {
@@ -2318,6 +2509,11 @@ function bindEvents() {
     }
     renderSyncState();
   });
+  el.exportBackupBtn?.addEventListener("click", () => exportFullBackup());
+  el.importBackupBtn?.addEventListener("click", () => {
+    if (!state.backupBusy) el.backupPicker?.click();
+  });
+  el.backupPicker?.addEventListener("change", () => importFullBackup(el.backupPicker.files?.[0]));
   el.closeHintBtn?.addEventListener("click", () => el.closeHintBtn.closest(".hint-card").hidden = true);
   el.closeDockBtn?.addEventListener("click", () => document.querySelector(".record-dock").hidden = true);
 
@@ -2351,7 +2547,7 @@ async function init() {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("./sw.js?v=49").then((registration) => registration.update()).catch(() => {});
+  navigator.serviceWorker.register("./sw.js?v=50").then((registration) => registration.update()).catch(() => {});
 }
 
 window.addEventListener("unhandledrejection", (event) => {

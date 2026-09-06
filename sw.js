@@ -1,4 +1,4 @@
-const CACHE_NAME = "voice-journal-v49";
+const CACHE_NAME = "voice-journal-v50";
 const STATIC_ASSETS = [
   "./manifest.webmanifest?v=voice-v4",
   "./icon.svg?v=voice-v4",

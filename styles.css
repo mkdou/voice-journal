@@ -2019,6 +2019,11 @@ button {
     font-weight: 900;
   }
 
+  .panel-action:disabled {
+    cursor: wait;
+    opacity: 0.55;
+  }
+
   .subtle-action {
     background: rgba(255, 255, 255, 0.78);
     color: var(--muted);
@@ -2048,6 +2053,32 @@ button {
     border-radius: 16px;
     background: rgba(159, 219, 190, 0.18);
     font-size: 13px;
+  }
+
+  .backup-panel {
+    margin-top: 26px;
+    padding-top: 22px;
+    border-top: 1px solid var(--line);
+  }
+
+  .backup-panel h3 {
+    margin: 0 0 6px;
+    font-size: 18px;
+  }
+
+  .backup-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .backup-export-action {
+    background: #efb27f;
+    color: #50321f;
+  }
+
+  .backup-note {
+    background: rgba(239, 178, 127, 0.16);
   }
 
   .cover-library {
