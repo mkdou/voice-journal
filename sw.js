@@ -1,5 +1,11 @@
-const CACHE_NAME = "voice-journal-v47";
-const STATIC_ASSETS = ["./manifest.webmanifest?v=voice-v2", "./icon.svg?v=voice-v2"];
+const CACHE_NAME = "voice-journal-v48";
+const STATIC_ASSETS = [
+  "./manifest.webmanifest?v=voice-v3",
+  "./icon.svg?v=voice-v3",
+  "./icon-192.png?v=voice-v3",
+  "./icon-512.png?v=voice-v3",
+  "./apple-touch-icon.png?v=voice-v3"
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS)));

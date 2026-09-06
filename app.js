@@ -2351,7 +2351,7 @@ async function init() {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("./sw.js?v=47").then((registration) => registration.update()).catch(() => {});
+  navigator.serviceWorker.register("./sw.js?v=48").then((registration) => registration.update()).catch(() => {});
 }
 
 window.addEventListener("unhandledrejection", (event) => {
