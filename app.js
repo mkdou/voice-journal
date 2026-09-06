@@ -1509,10 +1509,13 @@ function fileToText(file) {
 }
 
 function dataUrlToBlob(dataUrl) {
-  const match = /^data:([^;,]*)(;base64)?,(.*)$/s.exec(String(dataUrl || ""));
-  if (!match) throw new Error("录音备份格式不正确");
-  const mimeType = match[1] || "application/octet-stream";
-  const binary = match[2] ? atob(match[3]) : decodeURIComponent(match[3]);
+  const value = String(dataUrl || "");
+  const commaIndex = value.indexOf(",");
+  if (!value.startsWith("data:") || commaIndex < 5) throw new Error("媒体备份格式不正确");
+  const metadata = value.slice(5, commaIndex);
+  const payload = value.slice(commaIndex + 1);
+  const mimeType = metadata.split(";")[0] || "application/octet-stream";
+  const binary = /;base64(?:;|$)/i.test(metadata) ? atob(payload) : decodeURIComponent(payload);
   const bytes = new Uint8Array(binary.length);
   for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
   return new Blob([bytes], { type: mimeType });
@@ -2705,7 +2708,7 @@ async function init() {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("./sw.js?v=52").then((registration) => registration.update()).catch(() => {});
+  navigator.serviceWorker.register("./sw.js?v=53").then((registration) => registration.update()).catch(() => {});
 }
 
 window.addEventListener("unhandledrejection", (event) => {
