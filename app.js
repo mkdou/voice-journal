@@ -1534,6 +1534,18 @@ function backupTimestamp() {
 
 const BACKUP_MAGIC = "VJBACKUP2\n";
 
+function usableAudioBlob(record) {
+  if (record?.blob instanceof Blob) return record.blob;
+  if (record?.blob instanceof ArrayBuffer) {
+    return new Blob([record.blob], { type: record.mimeType || "application/octet-stream" });
+  }
+  if (ArrayBuffer.isView(record?.blob)) {
+    return new Blob([record.blob.buffer], { type: record.mimeType || "application/octet-stream" });
+  }
+  if (String(record?.dataUrl || "").startsWith("data:")) return dataUrlToBlob(record.dataUrl);
+  return null;
+}
+
 async function buildFullBackupArchive() {
   await Promise.all(state.entries.map((entry) => putEntry(entry)));
   const entries = state.entries;
@@ -1597,10 +1609,15 @@ async function buildFullBackupArchive() {
   }
 
   const archivedAudio = [];
+  let skippedAudioRecords = 0;
   for (let index = 0; index < audioRecords.length; index += 1) {
     const record = audioRecords[index];
     setBackupBusy(true, `正在整理原始录音 ${index + 1}/${audioRecords.length}…`);
-    const blob = record.blob instanceof Blob ? record.blob : dataUrlToBlob(record.dataUrl || "");
+    const blob = usableAudioBlob(record);
+    if (!blob || !blob.size) {
+      skippedAudioRecords += 1;
+      continue;
+    }
     archivedAudio.push({
       id: record.id,
       mimeType: record.mimeType || blob.type || "application/octet-stream",
@@ -1615,6 +1632,7 @@ async function buildFullBackupArchive() {
     version: 2,
     exportedAt: nowISO(),
     assets,
+    warnings: { skippedAudioRecords },
     data: {
       entries: archivedEntries,
       ideas,
@@ -1649,7 +1667,8 @@ async function exportFullBackup() {
         files: [file],
         title: "Voice Journal 完整备份"
       });
-      setBackupBusy(false, `已生成完整备份：${backup.data.entries.length} 篇日记、${backup.data.audioBlobs.length} 段原始录音、${backup.data.coverImages.length} 张备用封面。`);
+      const skipped = backup.warnings?.skippedAudioRecords || 0;
+      setBackupBusy(false, `已生成完整备份：${backup.data.entries.length} 篇日记、${backup.data.audioBlobs.length} 段原始录音、${backup.data.coverImages.length} 张备用封面。${skipped ? `另有 ${skipped} 条旧录音没有原始文件，已保留日记和转写文字。` : ""}`);
       return;
     }
     const url = URL.createObjectURL(file);
@@ -1660,7 +1679,8 @@ async function exportFullBackup() {
     link.click();
     link.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 30000);
-    setBackupBusy(false, `完整备份已下载：${backup.data.entries.length} 篇日记、${backup.data.audioBlobs.length} 段原始录音、${backup.data.coverImages.length} 张备用封面。`);
+    const skipped = backup.warnings?.skippedAudioRecords || 0;
+    setBackupBusy(false, `完整备份已下载：${backup.data.entries.length} 篇日记、${backup.data.audioBlobs.length} 段原始录音、${backup.data.coverImages.length} 张备用封面。${skipped ? `另有 ${skipped} 条旧录音没有原始文件，已保留日记和转写文字。` : ""}`);
   } catch (error) {
     if (error?.name === "AbortError") {
       setBackupBusy(false, "已取消导出，原有数据没有变化。");
@@ -2685,7 +2705,7 @@ async function init() {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("./sw.js?v=51").then((registration) => registration.update()).catch(() => {});
+  navigator.serviceWorker.register("./sw.js?v=52").then((registration) => registration.update()).catch(() => {});
 }
 
 window.addEventListener("unhandledrejection", (event) => {
