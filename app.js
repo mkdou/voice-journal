@@ -52,7 +52,8 @@ const state = {
   timerId: null,
   saveTimers: new Map(),
   copyingTranscriptIds: new Set(),
-  backupBusy: false
+  backupBusy: false,
+  preparedBackupUrl: ""
 };
 
 const el = {
@@ -106,6 +107,7 @@ const el = {
   syncStatus: document.querySelector("#syncStatus"),
   exportBackupBtn: document.querySelector("#exportBackupBtn"),
   importBackupBtn: document.querySelector("#importBackupBtn"),
+  downloadBackupLink: document.querySelector("#downloadBackupLink"),
   backupPicker: document.querySelector("#backupPicker"),
   backupStatus: document.querySelector("#backupStatus")
 };
@@ -1665,25 +1667,16 @@ async function exportFullBackup() {
     const backup = archive.manifest;
     const filename = `voice-journal-backup-${backupTimestamp()}.vjournal`;
     const file = new File([archive.blob], filename, { type: "application/octet-stream" });
-    if (navigator.share && navigator.canShare?.({ files: [file] })) {
-      await navigator.share({
-        files: [file],
-        title: "Voice Journal 完整备份"
-      });
-      const skipped = backup.warnings?.skippedAudioRecords || 0;
-      setBackupBusy(false, `已生成完整备份：${backup.data.entries.length} 篇日记、${backup.data.audioBlobs.length} 段原始录音、${backup.data.coverImages.length} 张备用封面。${skipped ? `另有 ${skipped} 条旧录音没有原始文件，已保留日记和转写文字。` : ""}`);
-      return;
+    if (state.preparedBackupUrl) URL.revokeObjectURL(state.preparedBackupUrl);
+    state.preparedBackupUrl = URL.createObjectURL(file);
+    if (el.downloadBackupLink) {
+      el.downloadBackupLink.href = state.preparedBackupUrl;
+      el.downloadBackupLink.download = filename;
+      el.downloadBackupLink.hidden = false;
+      el.downloadBackupLink.textContent = `保存备份文件（${filename}）`;
     }
-    const url = URL.createObjectURL(file);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    document.body.append(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 30000);
     const skipped = backup.warnings?.skippedAudioRecords || 0;
-    setBackupBusy(false, `完整备份已下载：${backup.data.entries.length} 篇日记、${backup.data.audioBlobs.length} 段原始录音、${backup.data.coverImages.length} 张备用封面。${skipped ? `另有 ${skipped} 条旧录音没有原始文件，已保留日记和转写文字。` : ""}`);
+    setBackupBusy(false, `备份已生成：${backup.data.entries.length} 篇日记、${backup.data.audioBlobs.length} 段原始录音、${backup.data.coverImages.length} 张备用封面。请继续点击上方“保存备份文件”。${skipped ? `另有 ${skipped} 条旧录音没有原始文件，已保留日记和转写文字。` : ""}`);
   } catch (error) {
     if (error?.name === "AbortError") {
       setBackupBusy(false, "已取消导出，原有数据没有变化。");
@@ -1699,6 +1692,9 @@ async function exportFullBackup() {
 async function readBackupFile(file) {
   const prefix = await fileToText(file.slice(0, 64));
   if (!prefix.startsWith(BACKUP_MAGIC)) {
+    if (prefix.trim() === "Voice Journal 完整备份") {
+      throw new Error("选中的是分享标题文本，不是真正的备份文件。请在旧图标中重新生成，并选择 .vjournal 文件");
+    }
     return { backup: JSON.parse(await fileToText(file)), archive: null };
   }
   const match = /^VJBACKUP2\n(\d{12})\n/.exec(prefix);
@@ -2708,7 +2704,7 @@ async function init() {
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("./sw.js?v=53").then((registration) => registration.update()).catch(() => {});
+  navigator.serviceWorker.register("./sw.js?v=54").then((registration) => registration.update()).catch(() => {});
 }
 
 window.addEventListener("unhandledrejection", (event) => {

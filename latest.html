@@ -10,7 +10,7 @@
     <link rel="manifest" href="manifest.webmanifest?v=voice-v4" />
     <link rel="icon" href="icon.svg?v=voice-v4" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png?v=voice-v4" />
-    <link rel="stylesheet" href="styles.css?v=craft-v31" />
+    <link rel="stylesheet" href="styles.css?v=craft-v32" />
   </head>
   <body>
     <div class="app-shell">
@@ -175,6 +175,7 @@
               <button class="panel-action backup-export-action" id="exportBackupBtn" type="button">导出全部数据</button>
               <button class="panel-action subtle-action" id="importBackupBtn" type="button">合并导入备份</button>
             </div>
+            <a class="panel-action backup-download-action" id="downloadBackupLink" href="#" hidden>保存备份文件</a>
             <div class="sync-note backup-note" id="backupStatus">建议定期导出一份完整备份。</div>
           </div>
           <div class="cover-library">
@@ -235,6 +236,6 @@
     <input id="coverPicker" type="file" accept="image/*" hidden />
     <input id="coverLibraryPicker" type="file" accept="image/*" multiple hidden />
     <input id="backupPicker" type="file" accept="application/octet-stream,.vjournal,application/json,.json" hidden />
-    <script src="app.js?v=craft-v31"></script>
+    <script src="app.js?v=craft-v32"></script>
   </body>
 </html>

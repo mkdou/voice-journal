@@ -2077,6 +2077,18 @@ button {
     color: #50321f;
   }
 
+  .backup-download-action {
+    margin-top: 10px;
+    background: #577c72;
+    color: #fff;
+    text-align: center;
+    text-decoration: none;
+  }
+
+  .backup-download-action[hidden] {
+    display: none;
+  }
+
   .backup-note {
     background: rgba(239, 178, 127, 0.16);
   }
